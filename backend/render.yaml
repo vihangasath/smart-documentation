@@ -5,11 +5,14 @@
 services:
   - type: web
     name: smart-doc-backend
-    runtime: docker
+    runtime: python
     rootDir: backend
-    dockerfilePath: ./backend/Dockerfile
+    buildCommand: ./build.sh
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     plan: free
     envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.12"
       - key: GEMINI_API_KEY
         sync: false            # You'll set this manually in the Render dashboard
       - key: APP_ENV
