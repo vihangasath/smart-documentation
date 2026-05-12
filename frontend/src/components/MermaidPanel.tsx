@@ -3,6 +3,8 @@ import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 import { useState } from "react";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 const MermaidDiagram = dynamic(() => import("./MermaidDiagram"), { ssr: false });
 
 interface Diagram {
@@ -49,7 +51,7 @@ export default function MermaidPanel({ isProcessing, data, scaffoldData }: Merma
 
           {scaffoldData?.download_url && (
             <a 
-              href={`http://localhost:8000${scaffoldData.download_url}`}
+              href={`${API_URL}${scaffoldData.download_url}`}
               download
               className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-md text-sm transition-colors shadow-lg"
             >

@@ -3,6 +3,8 @@
 import { useRef, useState } from "react";
 import { FileText, Upload, X, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 interface InputPanelProps {
   value: string;
   onChange: (value: string) => void;
@@ -43,7 +45,7 @@ export default function InputPanel({ value, onChange, onDocumentUploaded }: Inpu
       const formData = new FormData();
       formData.append("file", file);
 
-      const response = await fetch("http://localhost:8000/api/upload", {
+      const response = await fetch(`${API_URL}/api/upload`, {
         method: "POST",
         body: formData,
       });

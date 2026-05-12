@@ -2,6 +2,8 @@ import { Terminal } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 interface AgentLogsProps {
   isProcessing: boolean;
   documentId?: string | null;
@@ -23,7 +25,7 @@ export default function AgentLogs({ isProcessing }: AgentLogsProps) {
       setLogs([{ agent: "System", msg: "Connecting to SSE stream..." }]);
     }, 0);
     
-    const eventSource = new EventSource("http://localhost:8000/api/events");
+    const eventSource = new EventSource(`${API_URL}/api/events`);
     
     const handleMessage = (event: MessageEvent) => {
       try {

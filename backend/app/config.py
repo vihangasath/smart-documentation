@@ -4,6 +4,7 @@ Configuration module for Smart Documentation Architect.
 Uses pydantic-settings for strict, type-safe environment variable loading.
 """
 
+import os
 from pathlib import Path
 from functools import lru_cache
 
@@ -13,8 +14,12 @@ from pydantic import Field
 
 # ─── Paths ───────────────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).resolve().parent.parent
-UPLOADS_DIR = BASE_DIR / "uploads"
-OUTPUTS_DIR = BASE_DIR / "outputs"
+
+# In serverless environments (e.g., Render, Railway, AWS Lambda), the project
+# directory is read-only.  Use /tmp for ephemeral storage in production.
+_is_serverless = os.getenv("APP_ENV", "development") == "production"
+UPLOADS_DIR = Path("/tmp/uploads") if _is_serverless else BASE_DIR / "uploads"
+OUTPUTS_DIR = Path("/tmp/outputs") if _is_serverless else BASE_DIR / "outputs"
 KNOWLEDGE_ANCHOR_PATH = BASE_DIR.parent / "knowledge_anchor.md"
 
 

@@ -8,6 +8,8 @@ import AgentLogs from "@/components/AgentLogs";
 import { motion } from "framer-motion";
 import { Code2, Wand2 } from "lucide-react";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 export default function Home() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [srsText, setSrsText] = useState("");
@@ -28,7 +30,7 @@ export default function Home() {
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     try {
-      const response = await fetch("http://localhost:8000/api/analyze/full", {
+      const response = await fetch(`${API_URL}/api/analyze/full`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ document_id: documentId }),
