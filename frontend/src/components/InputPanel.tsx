@@ -23,24 +23,18 @@ export default function InputPanel({ value, onChange, onDocumentUploaded }: Inpu
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Reset state
     setUploadStatus("uploading");
     setErrorMessage(null);
     setUploadedFilename(null);
 
-    // For text/markdown files: preview content in textarea immediately
     if (file.type === "text/plain" || file.name.endsWith(".md") || file.name.endsWith(".txt")) {
       const reader = new FileReader();
-      reader.onload = (ev) => {
-        onChange(ev.target?.result as string ?? "");
-      };
+      reader.onload = (ev) => { onChange(ev.target?.result as string ?? ""); };
       reader.readAsText(file);
     } else {
-      // For PDF: clear textarea and show filename indicator instead
       onChange("");
     }
 
-    // Upload to backend
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -64,7 +58,6 @@ export default function InputPanel({ value, onChange, onDocumentUploaded }: Inpu
       setErrorMessage(msg);
       setUploadStatus("error");
     } finally {
-      // Reset the file input so the same file can be re-selected
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
@@ -79,7 +72,6 @@ export default function InputPanel({ value, onChange, onDocumentUploaded }: Inpu
 
   return (
     <>
-      {/* Hidden file input */}
       <input
         ref={fileInputRef}
         type="file"
@@ -90,85 +82,110 @@ export default function InputPanel({ value, onChange, onDocumentUploaded }: Inpu
       />
 
       {/* Panel header */}
-      <div className="p-4 border-b border-white/10 flex items-center justify-between bg-black/20">
+      <div
+        className="px-4 py-3 border-b flex items-center justify-between"
+        style={{ borderColor: "var(--border-color)", background: "var(--bg-card)" }}
+      >
         <div className="flex items-center gap-2">
-          <FileText className="w-5 h-5 text-gray-400" />
-          <h2 className="font-semibold">Raw Input (SRS)</h2>
+          <FileText className="w-4 h-4" style={{ color: "var(--text-muted)" }} />
+          <h2 className="font-semibold text-sm" style={{ color: "var(--text-primary)" }}>
+            SRS Input
+          </h2>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Upload status badge */}
+        <div className="flex items-center gap-1.5">
+          {/* Status badges */}
           {uploadStatus === "uploading" && (
-            <span className="flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-blue-500/20 text-blue-300 border border-blue-500/30 animate-pulse">
-              <Loader2 className="w-3 h-3 animate-spin" />
-              Uploading…
+            <span className="flex items-center gap-1 px-2 py-0.5 text-xs rounded-md bg-blue-500/15 text-blue-500 border border-blue-500/20 animate-pulse">
+              <Loader2 className="w-3 h-3 animate-spin" /> Uploading…
             </span>
           )}
           {uploadStatus === "success" && uploadedFilename && (
-            <span className="flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-green-500/20 text-green-300 border border-green-500/30 max-w-[160px] truncate" title={uploadedFilename}>
+            <span
+              className="flex items-center gap-1 px-2 py-0.5 text-xs rounded-md border max-w-[140px] truncate"
+              style={{ background: "rgba(34,197,94,0.1)", color: "#22c55e", borderColor: "rgba(34,197,94,0.25)" }}
+              title={uploadedFilename}
+            >
               <CheckCircle className="w-3 h-3 flex-shrink-0" />
               {uploadedFilename}
             </span>
           )}
           {uploadStatus === "error" && (
-            <span className="flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-red-500/20 text-red-300 border border-red-500/30 max-w-[200px] truncate" title={errorMessage ?? "Error"}>
+            <span
+              className="flex items-center gap-1 px-2 py-0.5 text-xs rounded-md border max-w-[180px] truncate"
+              style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444", borderColor: "rgba(239,68,68,0.25)" }}
+              title={errorMessage ?? "Error"}
+            >
               <AlertCircle className="w-3 h-3 flex-shrink-0" />
               {errorMessage}
             </span>
           )}
 
-          {/* Clear button (shown after upload) */}
           {(uploadStatus === "success" || uploadStatus === "error") && (
             <button
               onClick={clearFile}
-              className="p-1 hover:bg-white/10 rounded-md transition-colors"
+              className="p-1 rounded-md transition-colors hover:bg-[var(--bg-card-hover)]"
               title="Clear file"
             >
-              <X className="w-3.5 h-3.5 text-gray-400" />
+              <X className="w-3.5 h-3.5" style={{ color: "var(--text-muted)" }} />
             </button>
           )}
 
-          {/* Upload button */}
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploadStatus === "uploading"}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed group"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs transition-all
+              disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{
+              background: "var(--bg-card-hover)",
+              border: "1px solid var(--border-color)",
+              color: "var(--text-secondary)",
+            }}
             title="Upload SRS document (PDF, MD, TXT)"
           >
-            <Upload className="w-4 h-4 text-gray-400 group-hover:text-blue-400 transition-colors" />
-            <span className="text-xs text-gray-500 group-hover:text-blue-400 transition-colors hidden sm:inline">Upload</span>
+            <Upload className="w-3.5 h-3.5" />
+            <span>Upload</span>
           </button>
         </div>
       </div>
 
-      {/* PDF / DOCX preview banner (when a binary doc is loaded) */}
-      {uploadStatus === "success" &&
-        uploadedFilename &&
+      {/* PDF / DOCX indicator */}
+      {uploadStatus === "success" && uploadedFilename &&
         [".pdf", ".doc", ".docx"].some((ext) => uploadedFilename.endsWith(ext)) &&
         value === "" && (
-        <div className="px-4 py-2 bg-blue-500/10 border-b border-blue-500/20 flex items-center gap-2">
-          <FileText className="w-4 h-4 text-blue-400 flex-shrink-0" />
-          <span className="text-xs text-blue-300">
-            <strong>{uploadedFilename}</strong> uploaded — the backend will parse it directly. You can also add extra notes below.
+        <div
+          className="px-3 py-2 border-b flex items-center gap-2 text-xs"
+          style={{
+            background: "rgba(59,130,246,0.08)",
+            borderColor: "rgba(59,130,246,0.2)",
+            color: "#3b82f6",
+          }}
+        >
+          <FileText className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>
+            <strong>{uploadedFilename}</strong> — backend will parse it. Add extra notes below if needed.
           </span>
         </div>
       )}
 
       {/* Textarea */}
-      <div className="flex-1 p-4 relative">
+      <div className="flex-1 p-3 relative">
         <textarea
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={
-            uploadStatus === "success" &&
-            uploadedFilename &&
+            uploadStatus === "success" && uploadedFilename &&
             [".pdf", ".doc", ".docx"].some((ext) => uploadedFilename.endsWith(ext))
-              ? `Optional: add extra context or notes for '${uploadedFilename}'…`
-              : "Paste your Software Requirements Specification here…\n\nOr click Upload above to load a PDF, Word (.docx), Markdown, or Text file."
+              ? `Optional: add context for '${uploadedFilename}'…`
+              : "Paste your SRS document here…\n\nOr click Upload to load a PDF, Word, Markdown, or TXT file."
           }
-          className="w-full h-full bg-transparent resize-none outline-none text-gray-300 placeholder-gray-600 focus:ring-0 leading-relaxed"
+          className="w-full h-full bg-transparent resize-none outline-none leading-relaxed text-sm"
+          style={{ color: "var(--text-primary)" }}
         />
-        <div className="absolute bottom-4 right-4 text-xs text-gray-500 font-mono">
+        <div
+          className="absolute bottom-3 right-3 text-[11px] font-mono"
+          style={{ color: "var(--text-muted)" }}
+        >
           {value.length} chars
         </div>
       </div>

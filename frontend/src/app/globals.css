@@ -1,62 +1,154 @@
 @import "tailwindcss";
 
+/* ─────────────────────────────────────────────────────────────────────────── */
+/*  CSS Custom Properties — Theme Variables                                    */
+/*  Light mode is the default. Dark mode is applied via the `.dark` class      */
+/*  on <html> (controlled by ThemeContext).                                    */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
 :root {
-  --background: #fafafa;
-  --foreground: #09090b;
-  --card: #ffffff;
-  --card-foreground: #09090b;
-  --border: #e4e4e7;
+  /* Light mode tokens */
+  --bg-primary: #f4f6fb;
+  --bg-secondary: #ffffff;
+  --bg-card: rgba(255, 255, 255, 0.85);
+  --bg-card-hover: rgba(255, 255, 255, 0.95);
+  --border-color: rgba(0, 0, 0, 0.08);
+  --border-color-strong: rgba(0, 0, 0, 0.14);
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --text-code: #1e293b;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06);
+  --shadow-lg: 0 4px 24px rgba(0,0,0,0.10);
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-glow: rgba(59, 130, 246, 0.25);
+  --scrollbar: rgba(0, 0, 0, 0.15);
+  --scrollbar-hover: rgba(0, 0, 0, 0.25);
+  --terminal-bg: #f8fafc;
+  --terminal-text: #166534;
+  --header-bg: rgba(248, 250, 252, 0.9);
+  --input-bg: rgba(241, 245, 249, 0.8);
+  --glass-blur: blur(16px);
 }
 
+html.dark {
+  /* Dark mode tokens */
+  --bg-primary: #09090b;
+  --bg-secondary: #111113;
+  --bg-card: rgba(255, 255, 255, 0.05);
+  --bg-card-hover: rgba(255, 255, 255, 0.08);
+  --border-color: rgba(255, 255, 255, 0.08);
+  --border-color-strong: rgba(255, 255, 255, 0.14);
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;   /* was #94a3b8 — much more visible */
+  --text-muted: #94a3b8;       /* was #64748b — clearly readable now */
+  --text-code: #86efac;
+  --shadow: 0 1px 3px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.3);
+  --shadow-lg: 0 4px 24px rgba(0,0,0,0.5);
+  --accent: #3b82f6;
+  --accent-hover: #60a5fa;
+  --accent-glow: rgba(59, 130, 246, 0.3);
+  --scrollbar: rgba(255, 255, 255, 0.15);
+  --scrollbar-hover: rgba(255, 255, 255, 0.25);
+  --terminal-bg: rgba(0, 0, 0, 0.6);
+  --terminal-text: #4ade80;
+  --header-bg: rgba(9, 9, 11, 0.85);
+  --input-bg: rgba(0, 0, 0, 0.3);
+  --glass-blur: blur(12px);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/*  Base Styles                                                                */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-background: var(--bg-primary);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #000000;
-    --foreground: #fafafa;
-    --card: rgba(255, 255, 255, 0.05);
-    --card-foreground: #fafafa;
-    --border: rgba(255, 255, 255, 0.1);
-  }
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  min-height: 100vh;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans);
-  background-image: 
-    radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%), 
-    radial-gradient(at 50% 0%, hsla(225,39%,30%,0.2) 0, transparent 50%), 
-    radial-gradient(at 100% 0%, hsla(339,49%,30%,0.2) 0, transparent 50%);
-  background-attachment: fixed;
-  min-height: 100vh;
+/* Light mode subtle background texture */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    radial-gradient(at 20% 10%, rgba(59,130,246,0.06) 0, transparent 60%),
+    radial-gradient(at 80% 90%, rgba(139,92,246,0.05) 0, transparent 60%);
+  transition: opacity 0.3s ease;
 }
+
+html.dark body::before {
+  background-image:
+    radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%),
+    radial-gradient(at 50% 0%, hsla(225,39%,30%,0.18) 0, transparent 50%),
+    radial-gradient(at 100% 0%, hsla(339,49%,30%,0.15) 0, transparent 50%);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/*  Glass Panel                                                                */
+/* ─────────────────────────────────────────────────────────────────────────── */
 
 .glass-panel {
-  background: var(--card);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--border);
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+  background: var(--bg-card);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow);
+  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
-/* Custom Scrollbar */
+/* ─────────────────────────────────────────────────────────────────────────── */
+/*  Custom Scrollbar                                                           */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 4px;
+  background: var(--scrollbar);
+  border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--scrollbar-hover);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/*  Auth Page Styles                                                           */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+.auth-input {
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  border-radius: 0.625rem;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color-strong);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.auth-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.auth-input::placeholder {
+  color: var(--text-muted);
 }

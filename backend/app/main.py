@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings, UPLOADS_DIR, OUTPUTS_DIR
-from app.infrastructure.api.routes import upload, analyze, diagrams, scaffold, events
+from app.infrastructure.api.routes import upload, analyze, diagrams, scaffold, events, auth
 from app.infrastructure.api.schemas.api_schemas import HealthResponse
 
 
@@ -27,6 +27,23 @@ async def lifespan(app: FastAPI):
     print("🚀 Smart Documentation Architect is starting up...")
     print(f"   Uploads dir: {UPLOADS_DIR}")
     print(f"   Outputs dir: {OUTPUTS_DIR}")
+
+    # ── Seed hardcoded admin account ─────────────────────────────────────
+    # This admin account is always available regardless of in-memory state.
+    # Credentials: admin@smartdoc.ai / Admin@1234
+    from app.infrastructure.api.dependencies import get_auth_usecase
+    auth_uc = get_auth_usecase()
+    try:
+        await auth_uc.register(
+            name="Admin",
+            email="admin@smartdoc.ai",
+            password="Admin@1234",
+        )
+        print("✅ Admin account seeded: admin@smartdoc.ai / Admin@1234")
+    except Exception:
+        # Already exists (shouldn't happen with in-memory store on fresh start,
+        # but guard against any edge case)
+        print("ℹ️  Admin account already seeded.")
 
     yield
 
@@ -57,15 +74,24 @@ def create_app() -> FastAPI:
     )
 
     # ── CORS Middleware ─────────────────────────────────────────────────
+    # Always include localhost origins so local dev works without an .env file.
+    cors_origins = list(set([
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
+        *settings.cors_origins_list,
+    ]))
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins_list,
+        allow_origins=cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
     # ── Routes ──────────────────────────────────────────────────────────
+    app.include_router(auth.router)
     app.include_router(upload.router)
     app.include_router(analyze.router)
     app.include_router(diagrams.router)

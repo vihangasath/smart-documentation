@@ -47,28 +47,39 @@ interface ExtractionPanelProps {
 
 type Tab = "entities" | "relationships" | "actions";
 
-const METHOD_COLORS: Record<string, string> = {
-  GET:    "bg-blue-500/20 text-blue-300 border-blue-500/40",
-  POST:   "bg-green-500/20 text-green-300 border-green-500/40",
-  PUT:    "bg-yellow-500/20 text-yellow-300 border-yellow-500/40",
-  PATCH:  "bg-orange-500/20 text-orange-300 border-orange-500/40",
-  DELETE: "bg-red-500/20 text-red-300 border-red-500/40",
+const METHOD_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+  GET:    { bg: "rgba(59,130,246,0.12)",  text: "#3b82f6",  border: "rgba(59,130,246,0.3)" },
+  POST:   { bg: "rgba(34,197,94,0.12)",   text: "#22c55e",  border: "rgba(34,197,94,0.3)" },
+  PUT:    { bg: "rgba(234,179,8,0.12)",   text: "#eab308",  border: "rgba(234,179,8,0.3)" },
+  PATCH:  { bg: "rgba(249,115,22,0.12)",  text: "#f97316",  border: "rgba(249,115,22,0.3)" },
+  DELETE: { bg: "rgba(239,68,68,0.12)",   text: "#ef4444",  border: "rgba(239,68,68,0.3)" },
 };
 
 function EntityCard({ entity }: { entity: Entity }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="border border-white/10 rounded-lg overflow-hidden mb-2">
+    <div
+      className="rounded-lg overflow-hidden mb-2"
+      style={{ border: "1px solid var(--border-color)" }}
+    >
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-3 py-2 bg-white/5 hover:bg-white/10 transition-colors text-left"
+        className="w-full flex items-center justify-between px-3 py-2 text-left transition-colors"
+        style={{ background: "var(--bg-card-hover)" }}
       >
         <div className="flex items-center gap-2">
-          <Database className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-          <span className="font-medium text-white text-sm">{entity.name}</span>
-          <span className="text-xs text-gray-500">({entity.attributes.length} attrs)</span>
+          <Database className="w-3.5 h-3.5 shrink-0" style={{ color: "#a855f7" }} />
+          <span className="font-medium text-sm" style={{ color: "var(--text-primary)" }}>
+            {entity.name}
+          </span>
+          <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+            ({entity.attributes.length} attrs)
+          </span>
         </div>
-        {open ? <ChevronDown className="w-3.5 h-3.5 text-gray-500" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-500" />}
+        {open
+          ? <ChevronDown className="w-3.5 h-3.5" style={{ color: "var(--text-muted)" }} />
+          : <ChevronRight className="w-3.5 h-3.5" style={{ color: "var(--text-muted)" }} />
+        }
       </button>
       <AnimatePresence>
         {open && (
@@ -76,19 +87,21 @@ function EntityCard({ entity }: { entity: Entity }) {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
+            transition={{ duration: 0.18 }}
             className="overflow-hidden"
           >
             {entity.description && (
-              <p className="px-3 pt-2 text-xs text-gray-400 italic">{entity.description}</p>
+              <p className="px-3 pt-2 text-xs italic" style={{ color: "var(--text-secondary)" }}>
+                {entity.description}
+              </p>
             )}
             <div className="px-3 py-2 space-y-1">
               {entity.attributes.map((attr) => (
                 <div key={attr.name} className="flex items-center gap-2 text-xs">
-                  <span className="text-gray-300 font-mono">{attr.name}</span>
-                  <span className="text-purple-400 font-mono">:{attr.data_type}</span>
+                  <span className="font-mono" style={{ color: "var(--text-primary)" }}>{attr.name}</span>
+                  <span className="font-mono" style={{ color: "#a855f7" }}>:{attr.data_type}</span>
                   {attr.is_required && (
-                    <span className="text-red-400 text-[10px]">required</span>
+                    <span className="text-[10px]" style={{ color: "#ef4444" }}>required</span>
                   )}
                 </div>
               ))}
@@ -108,21 +121,26 @@ export default function ExtractionPanel({ isProcessing, data }: ExtractionPanelP
   const actions = data?.actions || [];
 
   const tabs: { key: Tab; label: string; count: number; icon: React.ReactNode; color: string }[] = [
-    { key: "entities", label: "Entities", count: data?.entity_count ?? entities.length, icon: <Database className="w-3 h-3" />, color: "text-purple-400 border-purple-500" },
-    { key: "relationships", label: "Relations", count: data?.relationship_count ?? relationships.length, icon: <Link2 className="w-3 h-3" />, color: "text-blue-400 border-blue-500" },
-    { key: "actions", label: "Actions", count: data?.action_count ?? actions.length, icon: <Zap className="w-3 h-3" />, color: "text-yellow-400 border-yellow-500" },
+    { key: "entities", label: "Entities", count: data?.entity_count ?? entities.length, icon: <Database className="w-3 h-3" />, color: "#a855f7" },
+    { key: "relationships", label: "Relations", count: data?.relationship_count ?? relationships.length, icon: <Link2 className="w-3 h-3" />, color: "#3b82f6" },
+    { key: "actions", label: "Actions", count: data?.action_count ?? actions.length, icon: <Zap className="w-3 h-3" />, color: "#eab308" },
   ];
 
   return (
     <>
       {/* Header */}
-      <div className="p-3 border-b border-white/10 bg-black/20">
-        <div className="flex items-center gap-2 mb-2">
-          <Database className="w-4 h-4 text-purple-400" />
-          <h2 className="font-semibold text-sm">
+      <div
+        className="px-3 py-3 border-b"
+        style={{ borderColor: "var(--border-color)", background: "var(--bg-card)" }}
+      >
+        <div className="flex items-center gap-2 mb-2.5">
+          <Database className="w-4 h-4" style={{ color: "#a855f7" }} />
+          <h2 className="font-semibold text-sm" style={{ color: "var(--text-primary)" }}>
             Logic Extraction
             {data?.project_name && (
-              <span className="ml-2 text-gray-400 font-normal text-xs">— {data.project_name}</span>
+              <span className="ml-2 font-normal text-xs" style={{ color: "var(--text-muted)" }}>
+                — {data.project_name}
+              </span>
             )}
           </h2>
         </div>
@@ -132,18 +150,17 @@ export default function ExtractionPanel({ isProcessing, data }: ExtractionPanelP
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md border transition-all ${
+              className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md border transition-all"
+              style={
                 activeTab === tab.key
-                  ? `${tab.color} bg-white/10`
-                  : "text-gray-500 border-transparent hover:text-gray-300 hover:bg-white/5"
-              }`}
+                  ? { color: tab.color, borderColor: tab.color, background: `${tab.color}15` }
+                  : { color: "var(--text-muted)", borderColor: "transparent", background: "transparent" }
+              }
             >
               {tab.icon}
               {tab.label}
               {data && (
-                <span className={`px-1 py-0 rounded text-[10px] font-bold ${activeTab === tab.key ? "" : "opacity-60"}`}>
-                  {tab.count}
-                </span>
+                <span className="font-bold text-[10px]">{tab.count}</span>
               )}
             </button>
           ))}
@@ -151,16 +168,16 @@ export default function ExtractionPanel({ isProcessing, data }: ExtractionPanelP
       </div>
 
       {/* Body */}
-      <div className="flex-1 p-3 bg-black/40 overflow-auto">
+      <div
+        className="flex-1 p-3 overflow-auto"
+        style={{ background: "var(--input-bg)" }}
+      >
         {isProcessing && !data ? (
-          <div className="flex items-center gap-2 text-purple-400 text-sm">
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
-            >
+          <div className="flex items-center gap-2 text-sm" style={{ color: "#a855f7" }}>
+            <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 2, ease: "linear" }}>
               <Code className="w-4 h-4" />
             </motion.div>
-            <span>Extracting bounded contexts and domain entities...</span>
+            <span>Extracting entities and domain model…</span>
           </div>
         ) : data ? (
           <AnimatePresence mode="wait">
@@ -172,56 +189,64 @@ export default function ExtractionPanel({ isProcessing, data }: ExtractionPanelP
               transition={{ duration: 0.15 }}
             >
               {activeTab === "entities" && (
-                entities.length > 0 ? (
-                  entities.map((e) => <EntityCard key={e.name} entity={e} />)
-                ) : (
-                  <p className="text-gray-500 text-xs">No entities extracted.</p>
-                )
+                entities.length > 0
+                  ? entities.map((e) => <EntityCard key={e.name} entity={e} />)
+                  : <p className="text-xs" style={{ color: "var(--text-muted)" }}>No entities extracted.</p>
               )}
 
               {activeTab === "relationships" && (
                 relationships.length > 0 ? (
                   <div className="space-y-2">
                     {relationships.map((r, i) => (
-                      <div key={i} className="flex items-center gap-2 text-xs border border-white/10 rounded-lg px-3 py-2 bg-white/5">
-                        <span className="text-blue-300 font-medium">{r.source}</span>
-                        <span className="text-gray-500">—{r.relationship_type}→</span>
-                        <span className="text-blue-300 font-medium">{r.target}</span>
-                        {r.label && <span className="text-gray-500 italic ml-auto">{r.label}</span>}
+                      <div
+                        key={i}
+                        className="flex items-center gap-2 text-xs rounded-lg px-3 py-2"
+                        style={{ border: "1px solid var(--border-color)", background: "var(--bg-card-hover)" }}
+                      >
+                        <span className="font-medium" style={{ color: "#3b82f6" }}>{r.source}</span>
+                        <span style={{ color: "var(--text-muted)" }}>— {r.relationship_type} →</span>
+                        <span className="font-medium" style={{ color: "#3b82f6" }}>{r.target}</span>
+                        {r.label && <span className="italic ml-auto" style={{ color: "var(--text-muted)" }}>{r.label}</span>}
                       </div>
                     ))}
                   </div>
-                ) : (
-                  <p className="text-gray-500 text-xs">No relationships extracted.</p>
-                )
+                ) : <p className="text-xs" style={{ color: "var(--text-muted)" }}>No relationships extracted.</p>
               )}
 
               {activeTab === "actions" && (
                 actions.length > 0 ? (
                   <div className="space-y-2">
-                    {actions.map((a, i) => (
-                      <div key={i} className="border border-white/10 rounded-lg px-3 py-2 bg-white/5 text-xs">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className={`px-1.5 py-0.5 rounded border font-bold font-mono text-[10px] ${METHOD_COLORS[a.http_method] || "bg-gray-500/20 text-gray-300 border-gray-500/40"}`}>
-                            {a.http_method}
-                          </span>
-                          <span className="text-yellow-300 font-mono">{a.endpoint}</span>
+                    {actions.map((a, i) => {
+                      const mc = METHOD_COLORS[a.http_method] || { bg: "rgba(100,116,139,0.12)", text: "#64748b", border: "rgba(100,116,139,0.3)" };
+                      return (
+                        <div
+                          key={i}
+                          className="rounded-lg px-3 py-2 text-xs"
+                          style={{ border: "1px solid var(--border-color)", background: "var(--bg-card-hover)" }}
+                        >
+                          <div className="flex items-center gap-2 mb-1">
+                            <span
+                              className="px-1.5 py-0.5 rounded border font-bold font-mono text-[10px]"
+                              style={{ background: mc.bg, color: mc.text, borderColor: mc.border }}
+                            >
+                              {a.http_method}
+                            </span>
+                            <span className="font-mono" style={{ color: "#eab308" }}>{a.endpoint}</span>
+                          </div>
+                          <div className="font-medium" style={{ color: "var(--text-primary)" }}>{a.name}</div>
+                          {a.description && <div className="mt-0.5" style={{ color: "var(--text-secondary)" }}>{a.description}</div>}
+                          {a.actor && <div className="mt-0.5" style={{ color: "var(--text-muted)" }}>Actor: {a.actor} → {a.target_entity}</div>}
                         </div>
-                        <div className="text-white font-medium">{a.name}</div>
-                        {a.description && <div className="text-gray-400 mt-0.5">{a.description}</div>}
-                        {a.actor && <div className="text-gray-500 mt-0.5">Actor: {a.actor} → {a.target_entity}</div>}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
-                ) : (
-                  <p className="text-gray-500 text-xs">No actions extracted.</p>
-                )
+                ) : <p className="text-xs" style={{ color: "var(--text-muted)" }}>No actions extracted.</p>
               )}
             </motion.div>
           </AnimatePresence>
         ) : (
-          <div className="text-gray-600 text-xs font-mono">
-            {"// Upload an SRS document and click Generate Architecture\n// Extracted entities, relationships & API actions will appear here."}
+          <div className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>
+            {"// Upload an SRS and click Generate Architecture\n// Entities, relations, and API actions will appear here."}
           </div>
         )}
       </div>

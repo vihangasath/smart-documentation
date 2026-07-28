@@ -9,7 +9,53 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+# ─── Auth Schemas ────────────────────────────────────────────────────────────────
+
+
+class SignupRequest(BaseModel):
+    """Request body for user registration."""
+
+    name: str = Field(..., min_length=1, max_length=100, description="Display name")
+    email: str = Field(..., description="Email address")
+    password: str = Field(..., min_length=8, description="Plain-text password (min 8 chars)")
+
+    @field_validator("email")
+    @classmethod
+    def email_must_be_valid(cls, v: str) -> str:
+        if "@" not in v or "." not in v.split("@")[-1]:
+            raise ValueError("Invalid email address.")
+        return v.lower().strip()
+
+
+class LoginRequest(BaseModel):
+    """Request body for user login."""
+
+    email: str = Field(..., description="Registered email address")
+    password: str = Field(..., description="Account password")
+
+    @field_validator("email")
+    @classmethod
+    def normalise_email(cls, v: str) -> str:
+        return v.lower().strip()
+
+
+class UserResponse(BaseModel):
+    """Public user profile returned in auth responses."""
+
+    id: str
+    name: str
+    email: str
+
+
+class AuthResponse(BaseModel):
+    """Response returned after successful signup or login."""
+
+    access_token: str
+    token_type: str = "bearer"
+    user: UserResponse
 
 
 # ─── Upload Schemas ──────────────────────────────────────────────────────────

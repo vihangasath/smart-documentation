@@ -9,52 +9,49 @@ interface AgentLogsProps {
   documentId?: string | null;
 }
 
+const AGENT_COLORS: Record<string, string> = {
+  Lead: "#3b82f6",
+  ParserAgent: "#a855f7",
+  DiagrammerAgent: "#eab308",
+  ScaffolderAgent: "#ec4899",
+  System: "#64748b",
+};
+
 export default function AgentLogs({ isProcessing }: AgentLogsProps) {
-  const [logs, setLogs] = useState<{agent: string, msg: string}[]>([]);
+  const [logs, setLogs] = useState<{ agent: string; msg: string }[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!isProcessing) {
-      // Don't clear logs immediately if processing finishes,
-      // so the user can see the final logs.
-      return;
-    }
+    if (!isProcessing) return;
 
-    // Delaying the initial state update to avoid synchronous setState during effect
     const timer = setTimeout(() => {
-      setLogs([{ agent: "System", msg: "Connecting to SSE stream..." }]);
+      setLogs([{ agent: "System", msg: "Connecting to SSE stream…" }]);
     }, 0);
-    
+
     const eventSource = new EventSource(`${API_URL}/api/events`);
-    
+
     const handleMessage = (event: MessageEvent) => {
       try {
         const data = JSON.parse(event.data);
-        setLogs(prev => [...prev, { agent: data.agent_name, msg: data.message }]);
+        setLogs((prev) => [...prev, { agent: data.agent_name, msg: data.message }]);
       } catch (err) {
         console.error("Failed to parse SSE message", err);
       }
     };
 
-    // Listen to all possible event types emitted by the backend
     const eventTypes = [
       "agent_start", "agent_progress", "agent_complete", "agent_error",
-      "pipeline_start", "pipeline_complete", "pipeline_error"
+      "pipeline_start", "pipeline_complete", "pipeline_error",
     ];
 
-    eventTypes.forEach(type => {
-      eventSource.addEventListener(type, handleMessage);
-    });
-    
-    eventSource.onopen = () => {
-      setLogs(prev => [...prev, { agent: "System", msg: "Stream connected. Awaiting events..." }]);
-    };
+    eventTypes.forEach((type) => eventSource.addEventListener(type, handleMessage));
 
-    // Also keep onmessage as fallback
+    eventSource.onopen = () => {
+      setLogs((prev) => [...prev, { agent: "System", msg: "Stream connected. Awaiting events…" }]);
+    };
     eventSource.onmessage = handleMessage;
-    
     eventSource.onerror = () => {
-      setLogs(prev => [...prev, { agent: "System", msg: "Stream disconnected or error occurred." }]);
+      setLogs((prev) => [...prev, { agent: "System", msg: "Stream disconnected." }]);
       eventSource.close();
     };
 
@@ -72,46 +69,58 @@ export default function AgentLogs({ isProcessing }: AgentLogsProps) {
 
   return (
     <>
-      <div className="p-4 border-b border-white/10 flex items-center justify-between bg-black/20">
+      {/* Header */}
+      <div
+        className="px-4 py-3 border-b flex items-center justify-between"
+        style={{ borderColor: "var(--border-color)", background: "var(--bg-card)" }}
+      >
         <div className="flex items-center gap-2">
-          <Terminal className="w-5 h-5 text-green-400" />
-          <h2 className="font-semibold">Agent Logs (Live Stream)</h2>
+          <Terminal className="w-4 h-4 text-green-500" />
+          <h2 className="font-semibold text-sm" style={{ color: "var(--text-primary)" }}>
+            Agent Logs
+          </h2>
         </div>
-        <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${isProcessing ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`} />
-          <span className="text-xs text-gray-400">{isProcessing ? 'Connected' : 'Offline'}</span>
+        <div className="flex items-center gap-1.5">
+          <div
+            className={`w-2 h-2 rounded-full ${
+              isProcessing ? "bg-green-500 animate-pulse" : "bg-gray-400"
+            }`}
+          />
+          <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+            {isProcessing ? "Live" : "Idle"}
+          </span>
         </div>
       </div>
-      <div 
+
+      {/* Log output */}
+      <div
         ref={scrollRef}
-        className="flex-1 p-4 bg-black/60 font-mono text-sm overflow-auto text-green-400 space-y-2"
+        className="flex-1 p-3 font-mono text-xs overflow-auto space-y-1.5"
+        style={{ background: "var(--terminal-bg)" }}
       >
         <AnimatePresence>
           {logs.map((log, idx) => (
-            <motion.div 
+            <motion.div
               key={idx}
-              initial={{ opacity: 0, x: -10 }}
+              initial={{ opacity: 0, x: -8 }}
               animate={{ opacity: 1, x: 0 }}
-              className="flex gap-3"
+              className="flex gap-2"
             >
-              <span className="text-gray-500 shrink-0">
+              <span style={{ color: "var(--text-muted)" }} className="shrink-0">
                 [{new Date().toLocaleTimeString([], { hour12: false })}]
               </span>
-              <span className={`shrink-0 ${
-                log?.agent === 'Lead' ? 'text-blue-400' :
-                log?.agent === 'ParserAgent' ? 'text-purple-400' :
-                log?.agent === 'DiagrammerAgent' ? 'text-yellow-400' :
-                log?.agent === 'ScaffolderAgent' ? 'text-pink-400' :
-                'text-gray-400'
-              }`}>
-                &lt;{log?.agent || 'System'}&gt;
+              <span
+                className="shrink-0"
+                style={{ color: AGENT_COLORS[log?.agent] || AGENT_COLORS.System }}
+              >
+                &lt;{log?.agent || "System"}&gt;
               </span>
-              <span className="text-green-300">{log?.msg || ''}</span>
+              <span style={{ color: "var(--terminal-text)" }}>{log?.msg || ""}</span>
             </motion.div>
           ))}
         </AnimatePresence>
         {!isProcessing && logs.length === 0 && (
-          <div className="text-gray-600">Waiting for generation to start...</div>
+          <div style={{ color: "var(--text-muted)" }}>Waiting for generation to start…</div>
         )}
       </div>
     </>

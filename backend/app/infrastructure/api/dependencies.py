@@ -12,9 +12,11 @@ from functools import lru_cache
 from app.config import get_settings, OUTPUTS_DIR
 from app.domain.ports.file_parser_port import FileParserPort
 from app.domain.ports.llm_port import LLMPort
+from app.domain.ports.user_store_port import UserStorePort
 from app.infrastructure.adapters.file_parser_adapter import FileParserAdapter
 from app.infrastructure.adapters.gemini_llm_adapter import GeminiLLMAdapter
 from app.infrastructure.adapters.zip_builder import ZipBuilder
+from app.infrastructure.adapters.in_memory_user_store import InMemoryUserStore
 from app.agents.parser_agent import ParserAgent
 from app.agents.diagrammer_agent import DiagrammerAgent
 from app.agents.scaffolder_agent import ScaffolderAgent
@@ -22,6 +24,7 @@ from app.application.parse_srs_usecase import ParseSRSUseCase
 from app.application.generate_diagrams_usecase import GenerateDiagramsUseCase
 from app.application.scaffold_project_usecase import ScaffoldProjectUseCase
 from app.application.orchestrator import Orchestrator
+from app.application.auth_usecase import AuthUseCase
 
 
 # ─── Adapter Singletons ────────────────────────────────────────────────────
@@ -43,6 +46,18 @@ def get_llm() -> LLMPort:
 def get_zip_builder() -> ZipBuilder:
     """Provide the ZIP builder."""
     return ZipBuilder()
+
+
+@lru_cache
+def get_user_store() -> UserStorePort:
+    """Provide the in-memory user store."""
+    return InMemoryUserStore()
+
+
+@lru_cache
+def get_auth_usecase() -> AuthUseCase:
+    """Provide the Auth use case."""
+    return AuthUseCase(user_store=get_user_store())
 
 
 # ─── Agent Singletons ──────────────────────────────────────────────────────

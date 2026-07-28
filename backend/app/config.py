@@ -52,6 +52,14 @@ class Settings(BaseSettings):
         default="http://localhost:3000,http://localhost:5173",
     )
 
+    # ── Auth / JWT ───────────────────────────────────────────────────────
+    jwt_secret_key: str = Field(
+        default="change-this-secret-key-in-production-please",
+        description="Secret key used to sign JWT tokens.",
+    )
+    jwt_algorithm: str = Field(default="HS256")
+    jwt_expire_days: int = Field(default=7)
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
