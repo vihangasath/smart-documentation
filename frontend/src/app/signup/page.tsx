@@ -2,10 +2,11 @@
 
 import { useState, FormEvent } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import ThemeToggle from "@/components/ThemeToggle";
-import { Code2, Loader2, AlertCircle, Eye, EyeOff, CheckCircle2 } from "lucide-react";
+import { Loader2, AlertCircle, Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import { motion } from "framer-motion";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -98,14 +99,21 @@ export default function SignupPage() {
         >
           {/* Logo + Title */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 mb-4">
-              <Code2 className="w-6 h-6 text-blue-500" />
+            <div className="flex justify-center mb-4">
+              <Image
+                src="/logo.png"
+                alt="Structify logo"
+                width={56}
+                height={56}
+                className="rounded-2xl"
+                priority
+              />
             </div>
             <h1 className="text-2xl font-bold text-[var(--text-primary)] mb-1">
               Create your account
             </h1>
             <p className="text-sm text-[var(--text-secondary)]">
-              Start using Smart Documentation Architect
+              Start using Structify
             </p>
           </div>
 

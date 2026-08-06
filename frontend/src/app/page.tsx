@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import InputPanel from "@/components/InputPanel";
 import ExtractionPanel from "@/components/ExtractionPanel";
 import MermaidPanel from "@/components/MermaidPanel";
@@ -9,7 +10,7 @@ import AuthGuard from "@/components/AuthGuard";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useAuth } from "@/contexts/AuthContext";
 import { motion } from "framer-motion";
-import { Code2, Wand2, LogOut, User } from "lucide-react";
+import { Wand2, LogOut, User } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -75,12 +76,17 @@ function Dashboard() {
       >
         {/* Brand */}
         <div className="flex items-center gap-2.5">
-          <div className="p-1.5 rounded-lg" style={{ background: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.2)" }}>
-            <Code2 className="w-5 h-5 text-blue-500" />
-          </div>
+          <Image
+            src="/logo.png"
+            alt="Structify logo"
+            width={36}
+            height={36}
+            className="rounded-lg"
+            priority
+          />
           <div>
             <h1 className="text-base font-bold leading-tight" style={{ color: "var(--text-primary)" }}>
-              Smart Doc Architect
+              Structify
             </h1>
             <p className="text-[11px] hidden sm:block" style={{ color: "var(--text-muted)" }}>
               AI-Powered System Design

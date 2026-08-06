@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Smart Documentation Architect",
-  description: "AI-Powered System Design Orchestrator — transform SRS documents into architecture diagrams and boilerplate code.",
+  title: "Structify",
+  description: "Structify — AI-Powered System Design. Transform SRS documents into architecture diagrams and boilerplate code.",
 };
 
 export default function RootLayout({
