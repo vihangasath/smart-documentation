@@ -132,8 +132,7 @@ export default function MermaidPanel({ isProcessing, data, scaffoldData }: Merma
 
   const DiagramArea = ({ refHandle }: { refHandle: React.Ref<MermaidDiagramHandle> }) => (
     <div
-      className="flex-1 overflow-auto flex items-center justify-center p-6"
-      style={{ background: "var(--input-bg)" }}
+      className="flex-1 overflow-hidden flex items-center justify-center bg-[var(--input-bg)] relative"
     >
       {isProcessing && diagrams.length === 0 ? (
         <motion.div
@@ -210,7 +209,7 @@ export default function MermaidPanel({ isProcessing, data, scaffoldData }: Merma
             </div>
 
             {/* Modal body — diagram fills the rest */}
-            <div className="flex-1 overflow-auto flex items-center justify-center p-8" style={{ background: "var(--input-bg)" }}>
+            <div className="flex-1 overflow-hidden relative flex items-center justify-center bg-[var(--input-bg)]">
               {currentDiagram ? (
                 <MermaidDiagram ref={modalDiagramRef} chart={currentDiagram.mermaid_code} />
               ) : (

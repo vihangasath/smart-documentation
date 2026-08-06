@@ -134,42 +134,51 @@ export default function InputPanel({ value, onChange, onDocumentUploaded }: Inpu
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploadStatus === "uploading"}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs transition-all
-              disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{
-              background: "var(--bg-card-hover)",
-              border: "1px solid var(--border-color)",
-              color: "var(--text-secondary)",
-            }}
-            title="Upload SRS document (PDF, MD, TXT)"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm hover:scale-[1.02] active:scale-95
+              disabled:opacity-50 disabled:cursor-not-allowed bg-blue-600 hover:bg-blue-700 text-white"
+            title="Upload SRS document (PDF, MD, TXT, DOCX)"
           >
-            <Upload className="w-3.5 h-3.5" />
-            <span>Upload</span>
+            <Upload className="w-4 h-4" />
+            <span>Upload Document</span>
           </button>
         </div>
       </div>
 
-      {/* PDF / DOCX indicator */}
-      {uploadStatus === "success" && uploadedFilename &&
-        [".pdf", ".doc", ".docx"].some((ext) => uploadedFilename.endsWith(ext)) &&
-        value === "" && (
-        <div
-          className="px-3 py-2 border-b flex items-center gap-2 text-xs"
-          style={{
-            background: "rgba(59,130,246,0.08)",
-            borderColor: "rgba(59,130,246,0.2)",
-            color: "#3b82f6",
-          }}
-        >
-          <FileText className="w-3.5 h-3.5 flex-shrink-0" />
-          <span>
-            <strong>{uploadedFilename}</strong> — backend will parse it. Add extra notes below if needed.
-          </span>
-        </div>
-      )}
+      {/* Main Content Area */}
+      <div className="flex-1 p-4 relative flex flex-col">
+        {uploadStatus === "success" && uploadedFilename && [".pdf", ".doc", ".docx"].some((ext) => uploadedFilename.endsWith(ext)) ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-6 border-2 border-dashed border-green-500/30 rounded-xl bg-green-500/5 mb-4 text-center">
+            <div className="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mb-4">
+              <CheckCircle className="w-8 h-8 text-green-500" />
+            </div>
+            <h3 className="text-lg font-semibold text-green-600 dark:text-green-400 mb-1">
+              Document Uploaded Successfully
+            </h3>
+            <p className="text-sm font-medium text-green-700 dark:text-green-300 mb-2 truncate max-w-full px-4">
+              {uploadedFilename}
+            </p>
+            <p className="text-xs text-green-600/70 dark:text-green-400/70 max-w-sm">
+              The backend will parse this document automatically. You can add additional context or notes in the text area below if needed.
+            </p>
+          </div>
+        ) : value === "" && uploadStatus === "idle" ? (
+          <div 
+            onClick={() => fileInputRef.current?.click()}
+            className="absolute inset-4 border-2 border-dashed rounded-xl flex flex-col items-center justify-center cursor-pointer transition-all hover:bg-blue-50/50 dark:hover:bg-blue-900/10 hover:border-blue-400"
+            style={{ borderColor: "var(--border-color)", background: "var(--bg-card)" }}
+          >
+            <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mb-3">
+              <Upload className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            </div>
+            <h3 className="text-base font-medium mb-1" style={{ color: "var(--text-primary)" }}>
+              Upload your SRS Document
+            </h3>
+            <p className="text-xs text-center max-w-[250px]" style={{ color: "var(--text-muted)" }}>
+              Drag and drop is not yet supported. Click here or use the upload button above to select a PDF, Word, or Text file.
+            </p>
+          </div>
+        ) : null}
 
-      {/* Textarea */}
-      <div className="flex-1 p-3 relative">
         <textarea
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -179,15 +188,24 @@ export default function InputPanel({ value, onChange, onDocumentUploaded }: Inpu
               ? `Optional: add context for '${uploadedFilename}'…`
               : "Paste your SRS document here…\n\nOr click Upload to load a PDF, Word, Markdown, or TXT file."
           }
-          className="w-full h-full bg-transparent resize-none outline-none leading-relaxed text-sm"
-          style={{ color: "var(--text-primary)" }}
+          className={`w-full bg-transparent resize-none outline-none leading-relaxed text-sm ${
+            (uploadStatus === "success" && uploadedFilename && [".pdf", ".doc", ".docx"].some((ext) => uploadedFilename.endsWith(ext))) ? "h-32 p-3 border rounded-lg" : "flex-1 absolute inset-4 p-4 z-10 bg-transparent"
+          }`}
+          style={{ 
+            color: "var(--text-primary)",
+            borderColor: "var(--border-color)",
+            backgroundColor: (uploadStatus === "success" && uploadedFilename && [".pdf", ".doc", ".docx"].some((ext) => uploadedFilename.endsWith(ext))) ? "var(--bg-card-hover)" : "transparent"
+          }}
         />
-        <div
-          className="absolute bottom-3 right-3 text-[11px] font-mono"
-          style={{ color: "var(--text-muted)" }}
-        >
-          {value.length} chars
-        </div>
+        
+        {value.length > 0 && (
+          <div
+            className="absolute bottom-6 right-6 text-[11px] font-mono px-2 py-1 rounded bg-black/5 dark:bg-white/10 z-20"
+            style={{ color: "var(--text-muted)" }}
+          >
+            {value.length} chars
+          </div>
+        )}
       </div>
     </>
   );
