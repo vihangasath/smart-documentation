@@ -5,6 +5,10 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000",
   },
+  // Allow Next.js Image component to serve the local logo
+  images: {
+    unoptimized: true,
+  },
 };
 
 export default nextConfig;
