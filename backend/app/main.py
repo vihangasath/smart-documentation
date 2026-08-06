@@ -61,7 +61,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
 
     app = FastAPI(
-        title="Smart Documentation Architect",
+        title="Structify",
         description=(
             "Transform unstructured SRS documents into structured system "
             "architectures, Mermaid.js diagrams, and deployable boilerplate code. "
@@ -119,7 +119,7 @@ def create_app() -> FastAPI:
     )
     async def root():
         return {
-            "name": "Smart Documentation Architect",
+            "name": "Structify",
             "version": "0.1.0",
             "docs": "/docs",
             "health": "/health",
