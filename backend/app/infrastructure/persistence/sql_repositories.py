@@ -251,6 +251,13 @@ class SqlResultRepository(ResultRepositoryPort):
         raw = await self._get(document_id, "scaffold_json")
         return ProjectScaffold.model_validate_json(raw) if raw else None
 
+    async def clear(self, document_id: str) -> None:
+        await self._db.run(
+            lambda c: c.execute(
+                delete(results_table).where(results_table.c.document_id == document_id)
+            )
+        )
+
 
 # ─── Jobs ───────────────────────────────────────────────────────────────────
 

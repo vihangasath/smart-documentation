@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 /**
  * AuthGuard — wraps a page and redirects to /login if the user is not authenticated.
- * Shows a subtle loading state while the auth token is being validated.
+ * Shows a quiet loading state while the auth token is being validated.
  */
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -20,10 +20,14 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[var(--bg-primary)]">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-4 border-[var(--border-color-strong)] border-t-[var(--accent)] rounded-full animate-spin" />
-          <p className="text-[var(--text-muted)] text-sm">Loading...</p>
+      <div className="min-h-screen grid place-items-center" role="status" aria-live="polite">
+        <div className="w-48">
+          <div className="stage" data-state="live">
+            <div className="stage-bar">
+              <span className="stage-chip" />
+            </div>
+            <span className="stage-label">Loading sheet</span>
+          </div>
         </div>
       </div>
     );

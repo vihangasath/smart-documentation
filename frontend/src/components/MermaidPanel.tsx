@@ -47,22 +47,17 @@ function HeaderControls({
   isDownloadingZip,
 }: HeaderControlsProps) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:justify-end">
       {diagrams.length > 0 && (
         <select
           aria-label="Select diagram"
-          className="text-xs rounded-md px-2 py-1 outline-none transition-colors"
-          style={{
-            background: "var(--input-bg)",
-            border: "1px solid var(--border-color-strong)",
-            color: "var(--text-primary)",
-          }}
+          className="field !py-0 h-8 text-sm basis-full sm:basis-auto sm:!w-auto"
           value={current?.id ?? ""}
           onChange={(e) => onSelect(e.target.value)}
         >
           {diagrams.map((d) => (
             <option key={d.id} value={d.id}>
-              {d.is_valid ? "" : "⚠ "}
+              {d.is_valid ? "" : "(invalid) "}
               {d.title}
             </option>
           ))}
@@ -75,13 +70,7 @@ function HeaderControls({
           onClick={onDownloadPng}
           disabled={isDownloadingPng}
           title="Download diagram as PNG"
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all
-            disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{
-            background: "rgba(59,130,246,0.12)",
-            border: "1px solid rgba(59,130,246,0.3)",
-            color: "#3b82f6",
-          }}
+          className="btn-line"
         >
           <ImageDown className="w-3.5 h-3.5" />
           {isDownloadingPng ? "Saving…" : "PNG"}
@@ -94,9 +83,7 @@ function HeaderControls({
           onClick={onDownloadZip}
           disabled={isDownloadingZip}
           title="Download the generated project as a ZIP"
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-white
-            bg-green-600 hover:bg-green-700 transition-colors shadow-sm
-            disabled:opacity-50 disabled:cursor-not-allowed"
+          className="btn-line is-signal"
         >
           {isDownloadingZip ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -111,17 +98,13 @@ function HeaderControls({
         id={inModal ? "minimize-diagram" : "maximize-diagram"}
         onClick={onToggleFullscreen}
         aria-label={isFullscreen ? "Exit fullscreen" : "Expand to fullscreen"}
-        className="p-1.5 rounded-lg transition-all hover:scale-105"
-        style={{
-          background: isFullscreen ? "rgba(59,130,246,0.15)" : "var(--bg-card-hover)",
-          border: `1px solid ${isFullscreen ? "rgba(59,130,246,0.4)" : "var(--border-color)"}`,
-        }}
+        className="icon-btn ml-auto sm:ml-0"
         title={isFullscreen ? "Exit fullscreen (Esc)" : "Expand to fullscreen"}
       >
         {isFullscreen ? (
-          <Minimize2 className="w-3.5 h-3.5" style={{ color: "#3b82f6" }} />
+          <Minimize2 className="w-4 h-4" />
         ) : (
-          <Maximize2 className="w-3.5 h-3.5" style={{ color: "var(--text-muted)" }} />
+          <Maximize2 className="w-4 h-4" />
         )}
       </button>
     </div>
@@ -143,14 +126,10 @@ function Warnings({ diagram, notes }: { diagram?: Diagram; notes: string[] }) {
   return (
     <div
       role="status"
-      className="flex items-start gap-2 px-4 py-2 text-xs border-b"
-      style={{
-        background: "rgba(234,179,8,0.1)",
-        color: "#ca8a04",
-        borderColor: "rgba(234,179,8,0.25)",
-      }}
+      className="flex items-start gap-2 px-4 py-2 text-sm"
+      style={{ color: "var(--warn)", borderBottom: "1px solid var(--rule)", background: "var(--paper-2)" }}
     >
-      <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+      <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden />
       <div className="space-y-0.5">
         {lines.map((l) => (
           <p key={l}>{l}</p>
@@ -169,26 +148,30 @@ interface DiagramAreaProps {
 
 function DiagramArea({ isProcessing, diagram, hasDiagrams, refHandle }: DiagramAreaProps) {
   return (
-    <div className="flex-1 overflow-hidden flex items-center justify-center bg-[var(--input-bg)] relative">
+    <div className="flex-1 min-h-[320px] lg:min-h-[260px] overflow-hidden flex items-center justify-center relative bg-[var(--paper-2)]">
       {isProcessing && !hasDiagrams ? (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="flex flex-col items-center gap-4"
-        >
-          <div className="w-10 h-10 border-4 border-blue-500/25 border-t-blue-500 rounded-full animate-spin" />
-          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-            Generating architecture diagrams…
-          </p>
-        </motion.div>
+        <div className="w-56" role="status">
+          <div className="stage" data-state="live">
+            <div className="stage-bar">
+              <span className="stage-chip" />
+            </div>
+            <span className="stage-label">Drawing diagrams…</span>
+          </div>
+        </div>
       ) : diagram ? (
-        <div className="w-full h-full flex items-center justify-center">
+        // Absolutely positioned so the diagram can never size the panel: it
+        // always fits the box the sheet gives it.
+        <div className="absolute inset-0">
           <MermaidDiagram ref={refHandle} chart={diagram.mermaid_code} />
         </div>
       ) : (
-        <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-          Diagrams will appear here after generation.
-        </p>
+        <>
+          <span className="reg-mark tl" aria-hidden />
+          <span className="reg-mark tr" aria-hidden />
+          <span className="reg-mark bl" aria-hidden />
+          <span className="reg-mark br" aria-hidden />
+          <p style={{ color: "var(--ink-3)" }}>Diagrams will appear here after generation.</p>
+        </>
       )}
     </div>
   );
@@ -269,18 +252,11 @@ export default function MermaidPanel({ isProcessing, data, scaffoldData }: Merma
 
   return (
     <>
-      {/* ── Inline panel (always rendered) ── */}
-      <div
-        className="px-4 py-3 border-b flex items-center justify-between"
-        style={{ borderColor: "var(--border-color)", background: "var(--bg-card)" }}
-      >
-        <div className="flex items-center gap-2">
-          <Layout className="w-4 h-4 text-blue-500" />
-          <h2 className="font-semibold text-sm" style={{ color: "var(--text-primary)" }}>
-            Architecture Diagrams
-          </h2>
-        </div>
-        {controls(false)}
+      <div className="panel-head flex-wrap py-1.5">
+        <Layout className="w-4 h-4" aria-hidden />
+        <h2 className="panel-title">Architecture Diagrams</h2>
+        <span className="zone-tag order-2 sm:order-none" aria-label="Zone A2">A2</span>
+        <div className="order-3 sm:order-none w-full sm:w-auto sm:ml-4 pb-1 sm:pb-0">{controls(false)}</div>
       </div>
 
       <Warnings diagram={current} notes={notes} />
@@ -302,51 +278,30 @@ export default function MermaidPanel({ isProcessing, data, scaffoldData }: Merma
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             className="fixed inset-0 z-50 flex flex-col"
-            style={{ background: "var(--bg-primary)" }}
+            style={{ background: "var(--paper)" }}
           >
-            <div
-              className="flex items-center justify-between px-6 py-4 border-b shrink-0"
-              style={{
-                borderColor: "var(--border-color)",
-                background: "var(--header-bg)",
-                backdropFilter: "var(--glass-blur)",
-              }}
-            >
-              <div className="flex items-center gap-3">
-                <Layout className="w-5 h-5 text-blue-500" />
-                <h2 className="font-semibold text-base" style={{ color: "var(--text-primary)" }}>
-                  {current?.title || "Architecture Diagram"}
-                </h2>
-                <span
-                  className="text-xs px-2 py-0.5 rounded-full"
-                  style={{
-                    background: "rgba(59,130,246,0.12)",
-                    color: "#3b82f6",
-                    border: "1px solid rgba(59,130,246,0.3)",
-                  }}
-                >
-                  Fullscreen
-                </span>
-              </div>
-              {controls(true)}
+            <div className="panel-head py-2 shrink-0 flex-wrap">
+              <Layout className="w-4 h-4" aria-hidden />
+              <h2 className="panel-title">{current?.title || "Architecture Diagram"}</h2>
+              <div className="ml-auto">{controls(true)}</div>
             </div>
 
             <Warnings diagram={current} notes={notes} />
 
-            <div className="flex-1 overflow-hidden relative flex items-center justify-center bg-[var(--input-bg)]">
+            <div className="flex-1 overflow-hidden relative flex items-center justify-center bg-[var(--paper-2)]">
               {current ? (
                 <MermaidDiagram ref={modalDiagramRef} chart={current.mermaid_code} />
               ) : (
-                <p style={{ color: "var(--text-muted)" }}>No diagram selected.</p>
+                <p style={{ color: "var(--ink-3)" }}>No diagram selected.</p>
               )}
             </div>
 
-            <div className="shrink-0 text-center py-2 text-xs" style={{ color: "var(--text-muted)" }}>
+            <div
+              className="shrink-0 text-center py-2 text-xs"
+              style={{ color: "var(--ink-3)", borderTop: "1px solid var(--rule)" }}
+            >
               Press{" "}
-              <kbd
-                className="px-1.5 py-0.5 rounded text-[10px] font-mono mx-1"
-                style={{ background: "var(--bg-card)", border: "1px solid var(--border-color)" }}
-              >
+              <kbd className="px-1.5 py-0.5 font-mono mx-1" style={{ border: "1px solid var(--ink-3)" }}>
                 Esc
               </kbd>
               to close fullscreen

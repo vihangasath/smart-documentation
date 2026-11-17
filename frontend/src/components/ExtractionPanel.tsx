@@ -1,35 +1,9 @@
-import { Database, Code, Link2, Zap, ChevronDown, ChevronRight } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+"use client";
+
+import { AnimatePresence, motion } from "framer-motion";
+import { ChevronDown, ChevronRight, Database } from "lucide-react";
 import { useState } from "react";
-
-interface Attribute {
-  name: string;
-  data_type: string;
-  is_required: boolean;
-  description?: string;
-}
-
-interface Entity {
-  name: string;
-  description?: string;
-  attributes: Attribute[];
-}
-
-interface Relationship {
-  source: string;
-  target: string;
-  relationship_type: string;
-  label?: string;
-}
-
-interface Action {
-  name: string;
-  description?: string;
-  actor?: string;
-  target_entity?: string;
-  http_method: string;
-  endpoint: string;
-}
+import type { Action, Entity, Relationship } from "@/types/api";
 
 interface ExtractionPanelProps {
   isProcessing: boolean;
@@ -47,69 +21,58 @@ interface ExtractionPanelProps {
 
 type Tab = "entities" | "relationships" | "actions";
 
-const METHOD_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  GET:    { bg: "rgba(59,130,246,0.12)",  text: "#3b82f6",  border: "rgba(59,130,246,0.3)" },
-  POST:   { bg: "rgba(34,197,94,0.12)",   text: "#22c55e",  border: "rgba(34,197,94,0.3)" },
-  PUT:    { bg: "rgba(234,179,8,0.12)",   text: "#eab308",  border: "rgba(234,179,8,0.3)" },
-  PATCH:  { bg: "rgba(249,115,22,0.12)",  text: "#f97316",  border: "rgba(249,115,22,0.3)" },
-  DELETE: { bg: "rgba(239,68,68,0.12)",   text: "#ef4444",  border: "rgba(239,68,68,0.3)" },
-};
-
-function EntityCard({ entity }: { entity: Entity }) {
+function EntityRow({ entity }: { entity: Entity }) {
   const [open, setOpen] = useState(false);
   return (
-    <div
-      className="rounded-lg overflow-hidden mb-2"
-      style={{ border: "1px solid var(--border-color)" }}
-    >
+    <li style={{ borderBottom: "1px solid var(--rule)" }}>
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-3 py-2 text-left transition-colors"
-        style={{ background: "var(--bg-card-hover)" }}
+        aria-expanded={open}
+        className="w-full flex items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-[var(--paper-2)]"
       >
-        <div className="flex items-center gap-2">
-          <Database className="w-3.5 h-3.5 shrink-0" style={{ color: "#a855f7" }} />
-          <span className="font-medium text-sm" style={{ color: "var(--text-primary)" }}>
-            {entity.name}
-          </span>
-          <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-            ({entity.attributes.length} attrs)
-          </span>
-        </div>
-        {open
-          ? <ChevronDown className="w-3.5 h-3.5" style={{ color: "var(--text-muted)" }} />
-          : <ChevronRight className="w-3.5 h-3.5" style={{ color: "var(--text-muted)" }} />
-        }
+        {open ? (
+          <ChevronDown className="w-4 h-4 shrink-0" aria-hidden />
+        ) : (
+          <ChevronRight className="w-4 h-4 shrink-0" aria-hidden />
+        )}
+        <span className="font-semibold">{entity.name}</span>
+        <span className="ml-auto text-sm tnum" style={{ color: "var(--ink-3)" }}>
+          {entity.attributes.length} attrs
+        </span>
       </button>
-      <AnimatePresence>
+      <AnimatePresence initial={false}>
         {open && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.18 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
             className="overflow-hidden"
           >
             {entity.description && (
-              <p className="px-3 pt-2 text-xs italic" style={{ color: "var(--text-secondary)" }}>
+              <p className="px-10 pb-2 text-sm" style={{ color: "var(--ink-2)" }}>
                 {entity.description}
               </p>
             )}
-            <div className="px-3 py-2 space-y-1">
-              {entity.attributes.map((attr, i) => (
-                <div key={`${attr.name}-${i}`} className="flex items-center gap-2 text-xs">
-                  <span className="font-mono" style={{ color: "var(--text-primary)" }}>{attr.name}</span>
-                  <span className="font-mono" style={{ color: "#a855f7" }}>:{attr.data_type}</span>
-                  {attr.is_required && (
-                    <span className="text-[10px]" style={{ color: "#ef4444" }}>required</span>
-                  )}
-                </div>
-              ))}
-            </div>
+            <table className="w-full text-sm font-mono mb-2">
+              <tbody>
+                {entity.attributes.map((attr, i) => (
+                  <tr key={`${attr.name}-${i}`} style={{ borderTop: "1px solid var(--rule)" }}>
+                    <td className="pl-10 pr-3 py-1">{attr.name}</td>
+                    <td className="px-3 py-1" style={{ color: "var(--ink-2)" }}>
+                      {attr.data_type}
+                    </td>
+                    <td className="pr-4 py-1 text-right" style={{ color: "var(--ink-3)" }}>
+                      {attr.is_required ? "required" : ""}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </li>
   );
 }
 
@@ -120,134 +83,140 @@ export default function ExtractionPanel({ isProcessing, data }: ExtractionPanelP
   const relationships = data?.relationships || [];
   const actions = data?.actions || [];
 
-  const tabs: { key: Tab; label: string; count: number; icon: React.ReactNode; color: string }[] = [
-    { key: "entities", label: "Entities", count: data?.entity_count ?? entities.length, icon: <Database className="w-3 h-3" />, color: "#a855f7" },
-    { key: "relationships", label: "Relations", count: data?.relationship_count ?? relationships.length, icon: <Link2 className="w-3 h-3" />, color: "#3b82f6" },
-    { key: "actions", label: "Actions", count: data?.action_count ?? actions.length, icon: <Zap className="w-3 h-3" />, color: "#eab308" },
+  const tabs: { key: Tab; label: string; count: number }[] = [
+    { key: "entities", label: "Entities", count: data?.entity_count ?? entities.length },
+    { key: "relationships", label: "Relations", count: data?.relationship_count ?? relationships.length },
+    { key: "actions", label: "Actions", count: data?.action_count ?? actions.length },
   ];
 
   return (
     <>
-      {/* Header */}
-      <div
-        className="px-3 py-3 border-b"
-        style={{ borderColor: "var(--border-color)", background: "var(--bg-card)" }}
-      >
-        <div className="flex items-center gap-2 mb-2.5">
-          <Database className="w-4 h-4" style={{ color: "#a855f7" }} />
-          <h2 className="font-semibold text-sm" style={{ color: "var(--text-primary)" }}>
-            Logic Extraction
-            {data?.project_name && (
-              <span className="ml-2 font-normal text-xs" style={{ color: "var(--text-muted)" }}>
-                — {data.project_name}
-              </span>
-            )}
-          </h2>
-        </div>
-        {/* Tabs */}
-        <div className="flex gap-1">
-          {tabs.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md border transition-all"
-              style={
-                activeTab === tab.key
-                  ? { color: tab.color, borderColor: tab.color, background: `${tab.color}15` }
-                  : { color: "var(--text-muted)", borderColor: "transparent", background: "transparent" }
-              }
-            >
-              {tab.icon}
-              {tab.label}
-              {data && (
-                <span className="font-bold text-[10px]">{tab.count}</span>
-              )}
-            </button>
-          ))}
-        </div>
+      <div className="panel-head">
+        <Database className="w-4 h-4" aria-hidden />
+        <h2 className="panel-title">
+          Logic Extraction
+          {data?.project_name && (
+            <span className="font-normal ml-2" style={{ color: "var(--ink-3)" }}>
+              {data.project_name}
+            </span>
+          )}
+        </h2>
+        <span className="zone-tag" aria-label="Zone C1">C1</span>
       </div>
 
-      {/* Body */}
-      <div
-        className="flex-1 p-3 overflow-auto"
-        style={{ background: "var(--input-bg)" }}
-      >
+      <div role="tablist" aria-label="Extraction" className="flex" style={{ borderBottom: "1px solid var(--rule)" }}>
+        {tabs.map((tab) => {
+          const active = activeTab === tab.key;
+          return (
+            <button
+              key={tab.key}
+              role="tab"
+              aria-selected={active}
+              onClick={() => setActiveTab(tab.key)}
+              className="relative px-4 py-2 text-sm font-semibold transition-colors hover:bg-[var(--paper-2)]"
+              style={{ color: active ? "var(--ink)" : "var(--ink-3)" }}
+            >
+              {tab.label}
+              {data && <span className="ml-1.5 tnum">{tab.count}</span>}
+              {active && (
+                <span
+                  aria-hidden
+                  className="absolute left-0 right-0 -bottom-px h-[3px]"
+                  style={{ background: "var(--signal)" }}
+                />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-auto">
         {isProcessing && !data ? (
-          <div className="flex items-center gap-2 text-sm" style={{ color: "#a855f7" }}>
-            <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 2, ease: "linear" }}>
-              <Code className="w-4 h-4" />
-            </motion.div>
-            <span>Extracting entities and domain model…</span>
+          <div className="p-4 max-w-xs">
+            <div className="stage" data-state="live">
+              <div className="stage-bar">
+                <span className="stage-chip" />
+              </div>
+              <span className="stage-label">Extracting entities and domain model…</span>
+            </div>
           </div>
-        ) : data ? (
-          <AnimatePresence mode="wait">
+        ) : !data ? (
+          <p className="p-4" style={{ color: "var(--ink-3)" }}>
+            Entities, relationships and actions appear here after generation.
+          </p>
+        ) : (
+          <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={activeTab}
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.15 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.12 }}
             >
-              {activeTab === "entities" && (
-                entities.length > 0
-                  ? entities.map((e, i) => <EntityCard key={`${e.name}-${i}`} entity={e} />)
-                  : <p className="text-xs" style={{ color: "var(--text-muted)" }}>No entities extracted.</p>
-              )}
-
-              {activeTab === "relationships" && (
-                relationships.length > 0 ? (
-                  <div className="space-y-2">
-                    {relationships.map((r, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center gap-2 text-xs rounded-lg px-3 py-2"
-                        style={{ border: "1px solid var(--border-color)", background: "var(--bg-card-hover)" }}
-                      >
-                        <span className="font-medium" style={{ color: "#3b82f6" }}>{r.source}</span>
-                        <span style={{ color: "var(--text-muted)" }}>— {r.relationship_type} →</span>
-                        <span className="font-medium" style={{ color: "#3b82f6" }}>{r.target}</span>
-                        {r.label && <span className="italic ml-auto" style={{ color: "var(--text-muted)" }}>{r.label}</span>}
-                      </div>
+              {activeTab === "entities" &&
+                (entities.length ? (
+                  <ul>
+                    {entities.map((e, i) => (
+                      <EntityRow key={`${e.name}-${i}`} entity={e} />
                     ))}
-                  </div>
-                ) : <p className="text-xs" style={{ color: "var(--text-muted)" }}>No relationships extracted.</p>
-              )}
+                  </ul>
+                ) : (
+                  <p className="p-4" style={{ color: "var(--ink-3)" }}>No entities found.</p>
+                ))}
 
-              {activeTab === "actions" && (
-                actions.length > 0 ? (
-                  <div className="space-y-2">
-                    {actions.map((a, i) => {
-                      const mc = METHOD_COLORS[a.http_method] || { bg: "rgba(100,116,139,0.12)", text: "#64748b", border: "rgba(100,116,139,0.3)" };
-                      return (
-                        <div
-                          key={i}
-                          className="rounded-lg px-3 py-2 text-xs"
-                          style={{ border: "1px solid var(--border-color)", background: "var(--bg-card-hover)" }}
+              {activeTab === "relationships" &&
+                (relationships.length ? (
+                  <ul>
+                    {relationships.map((r, i) => (
+                      <li
+                        key={i}
+                        className="flex flex-wrap items-baseline gap-x-2 px-4 py-2.5"
+                        style={{ borderBottom: "1px solid var(--rule)" }}
+                      >
+                        <span className="font-semibold">{r.source}</span>
+                        <span aria-hidden style={{ color: "var(--signal)" }}>→</span>
+                        <span className="font-semibold">{r.target}</span>
+                        <span className="text-sm" style={{ color: "var(--ink-3)" }}>
+                          {r.relationship_type}
+                          {r.label ? ` · ${r.label}` : ""}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="p-4" style={{ color: "var(--ink-3)" }}>No relationships found.</p>
+                ))}
+
+              {activeTab === "actions" &&
+                (actions.length ? (
+                  <ul>
+                    {actions.map((a, i) => (
+                      <li
+                        key={i}
+                        className="flex items-baseline gap-3 px-4 py-2.5"
+                        style={{ borderBottom: "1px solid var(--rule)" }}
+                      >
+                        <span
+                          className="font-mono text-xs font-semibold px-1.5 py-0.5 border shrink-0 w-[3.9rem] text-center"
+                          style={{ borderColor: "var(--ink)" }}
                         >
-                          <div className="flex items-center gap-2 mb-1">
-                            <span
-                              className="px-1.5 py-0.5 rounded border font-bold font-mono text-[10px]"
-                              style={{ background: mc.bg, color: mc.text, borderColor: mc.border }}
-                            >
-                              {a.http_method}
-                            </span>
-                            <span className="font-mono" style={{ color: "#eab308" }}>{a.endpoint}</span>
-                          </div>
-                          <div className="font-medium" style={{ color: "var(--text-primary)" }}>{a.name}</div>
-                          {a.description && <div className="mt-0.5" style={{ color: "var(--text-secondary)" }}>{a.description}</div>}
-                          {a.actor && <div className="mt-0.5" style={{ color: "var(--text-muted)" }}>Actor: {a.actor} → {a.target_entity}</div>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : <p className="text-xs" style={{ color: "var(--text-muted)" }}>No actions extracted.</p>
-              )}
+                          {a.http_method}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block font-mono text-sm truncate">{a.endpoint}</span>
+                          <span className="block text-sm" style={{ color: "var(--ink-2)" }}>
+                            {a.name}
+                            {a.actor ? <span style={{ color: "var(--ink-3)" }}> · {a.actor}</span> : null}
+                          </span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="p-4" style={{ color: "var(--ink-3)" }}>No actions found.</p>
+                ))}
             </motion.div>
           </AnimatePresence>
-        ) : (
-          <div className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>
-            {"// Upload an SRS and click Generate Architecture\n// Entities, relations, and API actions will appear here."}
-          </div>
         )}
       </div>
     </>

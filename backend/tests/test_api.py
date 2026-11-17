@@ -379,3 +379,71 @@ def test_data_survives_restart(tmp_path, fake_llm):
         assert c2.get("/api/auth/me", headers=h).status_code == 200
         again = c2.get(f"/api/jobs/{job['job_id']}", headers=h).json()
         assert again["status"] == "completed" and again["analysis"]["entity_count"] == 2
+
+
+def test_results_appear_while_the_job_is_still_running(tmp_path, fake_llm):
+    """Parse + diagrams are readable before the (slow) scaffold stage finishes."""
+    import asyncio
+
+    release = asyncio.Event()
+    original = fake_llm.generate
+
+    async def slow_scaffold(prompt, system_instruction="", *a, **k):
+        if "ONE file" in system_instruction:
+            await release.wait()
+        return await original(prompt, system_instruction, *a, **k)
+
+    fake_llm.generate = slow_scaffold
+    container = build_container(make_settings(tmp_path), llm=fake_llm)
+    with TestClient(create_app(container)) as c:
+        h = signup(c)
+        doc = text_doc(c, h)
+        job_id = c.post(
+            "/api/analyze/full", json={"document_id": doc}, headers=h
+        ).json()["job_id"]
+
+        deadline = time.time() + 15
+        partial = None
+        while time.time() < deadline:
+            body = c.get(f"/api/jobs/{job_id}", headers=h).json()
+            if body["analysis"] and body["diagrams"]:
+                partial = body
+                break
+            time.sleep(0.05)
+
+        assert partial is not None, "stage results never became visible"
+        assert partial["status"] == "running" and partial["scaffold"] is None
+
+        c.portal.call(release.set)
+        done = wait_for_job(c, h, job_id)
+        assert done["status"] == "completed" and done["scaffold"]["file_count"] == 6
+
+
+def test_a_new_run_does_not_show_the_previous_runs_results(tmp_path, fake_llm):
+    import asyncio
+
+    release = asyncio.Event()
+    state = {"hold": False}
+    original = fake_llm.generate
+
+    async def gated(prompt, system_instruction="", *a, **k):
+        if state["hold"]:
+            await release.wait()
+        return await original(prompt, system_instruction, *a, **k)
+
+    fake_llm.generate = gated
+    container = build_container(make_settings(tmp_path), llm=fake_llm)
+    with TestClient(create_app(container)) as c:
+        h = signup(c)
+        doc = text_doc(c, h)
+        run_pipeline(c, h, doc)  # first run completes normally
+
+        state["hold"] = True
+        job_id = c.post(
+            "/api/analyze/full", json={"document_id": doc}, headers=h
+        ).json()["job_id"]
+        body = c.get(f"/api/jobs/{job_id}", headers=h).json()
+        assert body["analysis"] is None and body["diagrams"] is None  # cleared at start
+
+        c.portal.call(release.set)
+        wait_for_job(c, h, job_id)

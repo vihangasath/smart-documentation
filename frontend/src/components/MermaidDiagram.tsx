@@ -48,7 +48,41 @@ const MermaidDiagram = forwardRef<MermaidDiagramHandle, MermaidDiagramProps>(
       // the diagram exportable to PNG in every browser.
       mermaid.initialize({
         startOnLoad: false,
-        theme: theme === "dark" ? "dark" : "default",
+        theme: "base",
+        themeVariables:
+          theme === "dark"
+            ? {
+                background: "#161718",
+                primaryColor: "#161718",
+                primaryBorderColor: "#ecebe5",
+                primaryTextColor: "#ecebe5",
+                secondaryColor: "#111213",
+                tertiaryColor: "#111213",
+                lineColor: "#ecebe5",
+                textColor: "#ecebe5",
+                noteBkgColor: "#2d2f32",
+                noteTextColor: "#ecebe5",
+                attributeBackgroundColorOdd: "#161718",
+                attributeBackgroundColorEven: "#1f2021",
+                rowOdd: "#161718",
+                rowEven: "#1f2021",
+              }
+            : {
+                background: "#fbfaf7",
+                primaryColor: "#fbfaf7",
+                primaryBorderColor: "#14161a",
+                primaryTextColor: "#14161a",
+                secondaryColor: "#f6f5f1",
+                tertiaryColor: "#f6f5f1",
+                lineColor: "#14161a",
+                textColor: "#14161a",
+                noteBkgColor: "#ff4a1c",
+                noteTextColor: "#14161a",
+                attributeBackgroundColorOdd: "#fbfaf7",
+                attributeBackgroundColorEven: "#efede6",
+                rowOdd: "#fbfaf7",
+                rowEven: "#efede6",
+              },
         securityLevel: "strict",
         fontFamily: "inherit",
         htmlLabels: false,
@@ -115,7 +149,7 @@ const MermaidDiagram = forwardRef<MermaidDiagramHandle, MermaidDiagramProps>(
           canvas.height = height * SCALE;
           const ctx = canvas.getContext("2d");
           if (!ctx) throw new Error("Canvas is not available in this browser.");
-          ctx.fillStyle = theme === "dark" ? "#1e1e2e" : "#ffffff";
+          ctx.fillStyle = theme === "dark" ? "#161718" : "#fbfaf7";
           ctx.fillRect(0, 0, canvas.width, canvas.height);
           ctx.scale(SCALE, SCALE);
           ctx.drawImage(img, 0, 0, width, height);
@@ -145,23 +179,20 @@ const MermaidDiagram = forwardRef<MermaidDiagramHandle, MermaidDiagramProps>(
           minScale={0.1}
           maxScale={8}
           centerOnInit={true}
-          wheel={{ step: 0.1 }}
+          // Plain wheel scrolls the page; Ctrl/Cmd+wheel (and trackpad pinch) zooms.
+          wheel={{ step: 0.1, activationKeys: ["Control", "Meta"] }}
           panning={{ velocityDisabled: true }}
         >
           {({ zoomIn, zoomOut, resetTransform }) => (
             <>
               {/* Zoom Controls overlay */}
               <div
-                className="absolute bottom-4 right-4 z-10 flex gap-1.5 p-1.5 rounded-xl shadow-lg border opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-200"
-                style={{
-                  background: "var(--bg-card)",
-                  borderColor: "var(--border-color)",
-                  backdropFilter: "blur(8px)",
-                }}
+                className="absolute bottom-3 right-3 z-10 flex gap-px opacity-100 sm:opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-200"
+                style={{ background: "var(--rule)", border: "1px solid var(--rule)" }}
               >
                 <button
                   onClick={() => zoomIn(0.5)}
-                  className="p-1.5 rounded-lg hover:bg-blue-500/10 hover:text-blue-500 transition-colors"
+                  className="icon-btn !border-0"
                   title="Zoom In"
                   aria-label="Zoom in"
                 >
@@ -169,16 +200,15 @@ const MermaidDiagram = forwardRef<MermaidDiagramHandle, MermaidDiagramProps>(
                 </button>
                 <button
                   onClick={() => zoomOut(0.5)}
-                  className="p-1.5 rounded-lg hover:bg-blue-500/10 hover:text-blue-500 transition-colors"
+                  className="icon-btn !border-0"
                   title="Zoom Out"
                   aria-label="Zoom out"
                 >
                   <ZoomOut className="w-4 h-4" />
                 </button>
-                <div className="w-px h-5 my-auto mx-0.5" style={{ background: "var(--border-color)" }} />
                 <button
                   onClick={() => resetTransform()}
-                  className="p-1.5 rounded-lg hover:bg-blue-500/10 hover:text-blue-500 transition-colors"
+                  className="icon-btn !border-0"
                   title="Fit to Screen"
                   aria-label="Fit to screen"
                 >

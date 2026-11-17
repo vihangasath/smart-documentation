@@ -24,6 +24,7 @@ from app.domain.entities.project_scaffold import ProjectScaffold
 from app.domain.entities.srs_document import SRSDocument
 from app.domain.errors import DomainError
 from app.domain.ports.event_publisher_port import EventPublisherPort
+from app.domain.ports.result_repository_port import ResultRepositoryPort
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -53,11 +54,13 @@ class Orchestrator:
         diagrams_usecase: GenerateDiagramsUseCase,
         scaffold_usecase: ScaffoldProjectUseCase,
         events: EventPublisherPort,
+        results: ResultRepositoryPort,
     ) -> None:
         self._parse = parse_usecase
         self._diagrams = diagrams_usecase
         self._scaffold = scaffold_usecase
         self._events = events
+        self._results = results
 
     async def _emit(
         self,
@@ -131,6 +134,10 @@ class Orchestrator:
             )
             result.schema = None
 
+        if result.schema is not None:
+            # Stored as soon as it exists so the UI can show it while later stages run.
+            await self._results.save_schema(result.schema)
+
         if result.schema is None:
             await self._emit(
                 EventType.PIPELINE_ERROR,
@@ -142,20 +149,30 @@ class Orchestrator:
 
         # ── Stages 2 & 3: Diagrams and Scaffold run concurrently ────────
         schema = result.schema
-        diagrams, scaffold = await asyncio.gather(
-            self._stage(
+
+        async def diagram_stage() -> DiagramSet | None:
+            out = await self._stage(
                 "DiagrammerAgent",
                 doc_id,
                 result.errors,
                 lambda: self._diagrams.execute(schema),
-            ),
-            self._stage(
+            )
+            if out is not None:
+                await self._results.save_diagrams(out)
+            return out
+
+        async def scaffold_stage() -> ProjectScaffold | None:
+            out = await self._stage(
                 "ScaffolderAgent",
                 doc_id,
                 result.errors,
                 lambda: self._scaffold.execute(schema),
-            ),
-        )
+            )
+            if out is not None:
+                await self._results.save_scaffold(out)
+            return out
+
+        diagrams, scaffold = await asyncio.gather(diagram_stage(), scaffold_stage())
         result.diagrams, result.scaffold = diagrams, scaffold
         if diagrams is not None:
             result.errors.extend(diagrams.errors)

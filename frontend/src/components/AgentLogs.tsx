@@ -2,7 +2,7 @@
 
 import { Terminal } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { streamEvents } from "@/lib/api";
 import type { AgentEvent } from "@/types/api";
 
@@ -10,20 +10,22 @@ interface AgentLogsProps {
   isProcessing: boolean;
   /** Document whose agent events are streamed. Remount (key) to start a new run. */
   documentId?: string | null;
+  /** Called for every distinct agent event (used by the title block). */
+  onEvent?: (event: AgentEvent) => void;
 }
 
 interface LogLine {
   agent: string;
   msg: string;
   time: string;
+  type: string;
 }
 
-const AGENT_COLORS: Record<string, string> = {
-  Lead: "#3b82f6",
-  ParserAgent: "#a855f7",
-  DiagrammerAgent: "#eab308",
-  ScaffolderAgent: "#ec4899",
-  System: "#64748b",
+// Each agent reports into a sheet zone; the log cites it like an index of plates.
+const AGENT_ZONES: Record<string, string> = {
+  ParserAgent: "C1",
+  DiagrammerAgent: "A2",
+  ScaffolderAgent: "A2",
 };
 
 const RECONNECT_DELAY_MS = 1500;
@@ -36,7 +38,7 @@ function formatTime(iso: string): string {
     : d.toLocaleTimeString([], { hour12: false });
 }
 
-export default function AgentLogs({ isProcessing, documentId }: AgentLogsProps) {
+export default function AgentLogs({ isProcessing, documentId, onEvent: onAgentEvent }: AgentLogsProps) {
   const [logs, setLogs] = useState<LogLine[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -46,14 +48,15 @@ export default function AgentLogs({ isProcessing, documentId }: AgentLogsProps) 
     const controller = new AbortController();
     // The server replays history on every (re)connect, so de-duplicate.
     const seen = new Set<string>();
-    const add = (agent: string, msg: string, iso = "") =>
-      setLogs((prev) => [...prev, { agent: agent || "System", msg, time: formatTime(iso) }]);
+    const add = (agent: string, msg: string, iso = "", type = "info") =>
+      setLogs((prev) => [...prev, { agent: agent || "System", msg, time: formatTime(iso), type }]);
 
     const onEvent = (e: AgentEvent) => {
       const key = `${e.timestamp}|${e.type}|${e.message}`;
       if (seen.has(key)) return;
       seen.add(key);
-      add(e.agent_name, e.message, e.timestamp);
+      add(e.agent_name, e.message, e.timestamp, e.type);
+      onAgentEvent?.(e);
     };
 
     async function run() {
@@ -75,6 +78,7 @@ export default function AgentLogs({ isProcessing, documentId }: AgentLogsProps) 
 
     void run();
     return () => controller.abort();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [documentId]);
 
   useEffect(() => {
@@ -85,60 +89,57 @@ export default function AgentLogs({ isProcessing, documentId }: AgentLogsProps) 
 
   return (
     <>
-      {/* Header */}
-      <div
-        className="px-4 py-3 border-b flex items-center justify-between"
-        style={{ borderColor: "var(--border-color)", background: "var(--bg-card)" }}
-      >
-        <div className="flex items-center gap-2">
-          <Terminal className="w-4 h-4 text-green-500" />
-          <h2 className="font-semibold text-sm" style={{ color: "var(--text-primary)" }}>
-            Agent Logs
-          </h2>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div
-            className={`w-2 h-2 rounded-full ${
-              isProcessing ? "bg-green-500 animate-pulse" : "bg-gray-400"
-            }`}
+      <div className="panel-head">
+        <Terminal className="w-4 h-4" aria-hidden />
+        <h2 className="panel-title">Agent Logs</h2>
+        <span className="flex items-center gap-1.5 text-sm" style={{ color: "var(--ink-3)" }}>
+          <span
+            aria-hidden
+            className={`inline-block w-2 h-2 rounded-full ${isProcessing ? "animate-pulse" : ""}`}
+            style={{ background: isProcessing ? "var(--signal)" : "var(--rule)" }}
           />
-          <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-            {isProcessing ? "Live" : "Idle"}
-          </span>
-        </div>
+          {isProcessing ? "Live" : "Idle"}
+        </span>
+        <span className="zone-tag" aria-label="Zone D2">D2</span>
       </div>
 
-      {/* Log output */}
       <div
         ref={scrollRef}
-        className="flex-1 p-3 font-mono text-xs overflow-auto space-y-1.5"
-        style={{ background: "var(--terminal-bg)" }}
+        role="log"
+        aria-live="polite"
+        className="flex-1 min-h-0 max-h-72 lg:max-h-none px-4 py-3 font-mono text-xs overflow-auto space-y-2"
+        style={{ background: "var(--log-bg)" }}
       >
         <AnimatePresence initial={false}>
-          {logs.map((log, idx) => (
-            <motion.div
-              key={idx}
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="flex gap-2"
-            >
-              {log.time && (
-                <span style={{ color: "var(--text-muted)" }} className="shrink-0">
-                  [{log.time}]
-                </span>
-              )}
-              <span
-                className="shrink-0"
-                style={{ color: AGENT_COLORS[log.agent] || AGENT_COLORS.System }}
+          {logs.map((log, idx) => {
+            const zone = AGENT_ZONES[log.agent];
+            const isError = log.type === "agent_error" || log.type === "pipeline_error";
+            return (
+              <motion.div
+                key={idx}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                className="leading-snug"
+                style={{ color: isError ? "var(--danger)" : "var(--ink)" }}
               >
-                &lt;{log.agent}&gt;
-              </span>
-              <span style={{ color: "var(--terminal-text)" }}>{log.msg}</span>
-            </motion.div>
-          ))}
+                <span className="tnum" style={{ color: "var(--ink-3)" }}>
+                  {log.time}
+                </span>{" "}
+                <span className="font-semibold">{log.agent}</span>
+                {zone && <span style={{ color: "var(--ink-3)" }}> [{zone}]</span>}{" "}
+                {log.type === "agent_complete" && (
+                  <span aria-hidden style={{ color: "var(--signal)" }}>
+                    ■{" "}
+                  </span>
+                )}
+                <span style={{ color: isError ? "var(--danger)" : "var(--ink-2)" }}>{log.msg}</span>
+              </motion.div>
+            );
+          })}
         </AnimatePresence>
         {!isProcessing && logs.length === 0 && (
-          <div style={{ color: "var(--text-muted)" }}>Waiting for generation to start…</div>
+          <p style={{ color: "var(--ink-3)" }}>Waiting for generation to start…</p>
         )}
       </div>
     </>

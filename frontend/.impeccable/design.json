@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-17T00:00:00Z",
+  "title": "Design System: Structify",
+  "extensions": {
+    "colorMeta": {
+      "signal": { "role": "primary", "displayName": "Signal Orange", "canonical": "#ff4a1c", "tonalRamp": ["#4d1100","#801d06","#b32a0c","#e63a14","#ff4a1c","#ff7c58","#ffb09a","#ffe0d7"] },
+      "paper": { "role": "neutral", "displayName": "Warm Paper", "canonical": "#f6f5f1", "tonalRamp": ["#2a2a28","#4a4a46","#6e6e68","#93938c","#b8b8b0","#d4d4cd","#e9e8e3","#f6f5f1"] },
+      "ink": { "role": "neutral", "displayName": "Drafting Ink", "canonical": "#14161a", "tonalRamp": ["#14161a","#272a30","#3b4048","#4f555f","#636973","#8c919a","#b9bcc2","#e1e3e6"] },
+      "rule": { "role": "neutral", "displayName": "Hairline Grey", "canonical": "#c8cbd0", "tonalRamp": ["#3b4048","#555b64","#6f7580","#8a9099","#a4a8b0","#c8cbd0","#dcdee1","#eeeff1"] },
+      "ok": { "role": "status", "displayName": "Status Green", "canonical": "#1d7a4d", "tonalRamp": ["#0a2e1d","#115a38","#1d7a4d","#2e9a66","#4cc38a","#85d9b0","#bdebd3","#e6f7ee"] },
+      "danger": { "role": "status", "displayName": "Status Red", "canonical": "#c0271d", "tonalRamp": ["#3d0b08","#701610","#c0271d","#e0463b","#ff6b5e","#ff9990","#ffc7c1","#ffe9e6"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Sign-in statement only." },
+      "headline": { "displayName": "Headline", "purpose": "Auth page titles and the title-block project name." },
+      "title": { "displayName": "Title", "purpose": "Panel titles and wordmark." },
+      "body": { "displayName": "Body", "purpose": "All reading text." },
+      "label": { "displayName": "Label", "purpose": "Field labels, stage names, zone tags, ruler letters." },
+      "mono": { "displayName": "Mono", "purpose": "Code and the agent log only." }
+    },
+    "shadows": [],
+    "motion": [
+      { "name": "ease-out-expo", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Button press (160ms) and arrow shift (200ms)." },
+      { "name": "chip-cross", "value": "1.6s cubic-bezier(0.65, 0, 0.35, 1) infinite alternate", "purpose": "Round chip crossing a live stage track." },
+      { "name": "hover-quick", "value": "140ms", "purpose": "Line button, icon button and field border/fill changes." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Signal Button",
+      "kind": "button",
+      "refersTo": "button-signal",
+      "description": "The single primary action; hatched when disabled.",
+      "html": "<button class=\"ds-btn-signal\">Generate Architecture</button>",
+      "css": ".ds-btn-signal{display:inline-flex;align-items:center;justify-content:center;width:100%;height:48px;padding:0 20px;border:1px solid var(--ink,#14161a);background:var(--signal,#ff4a1c);color:#14161a;font-weight:700;font-size:1rem;cursor:pointer;transition:transform 160ms cubic-bezier(0.16,1,0.3,1)}.ds-btn-signal:hover{background:var(--signal-hover,#ff6a40)}.ds-btn-signal:focus-visible{outline:2px solid var(--signal,#ff4a1c);outline-offset:2px}.ds-btn-signal:active{transform:translateY(1px)}"
+    },
+    {
+      "name": "Line Button",
+      "kind": "button",
+      "refersTo": "button-line",
+      "description": "Secondary outlined control that inverts on hover.",
+      "html": "<button class=\"ds-btn-line\">Sign out</button>",
+      "css": ".ds-btn-line{display:inline-flex;align-items:center;height:32px;padding:0 10px;border:1px solid var(--ink,#14161a);background:transparent;color:var(--ink,#14161a);font-size:.8125rem;font-weight:600;cursor:pointer;transition:background-color 140ms,color 140ms}.ds-btn-line:hover{background:var(--ink,#14161a);color:var(--paper,#f6f5f1)}.ds-btn-line:focus-visible{outline:2px solid var(--signal,#ff4a1c);outline-offset:2px}"
+    },
+    {
+      "name": "Field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "Square input with condensed uppercase label.",
+      "html": "<label class=\"ds-label\">Email</label><input class=\"ds-field\" placeholder=\"you@example.com\">",
+      "css": ".ds-label{display:block;font-family:var(--font-cond,'Barlow Condensed'),sans-serif;font-weight:600;font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2,#3b4048);margin-bottom:4px}.ds-field{width:100%;box-sizing:border-box;padding:.65rem .75rem;background:var(--paper-2,#fbfaf7);border:1px solid var(--ink-3,#636973);border-radius:0;color:var(--ink,#14161a);font-size:.95rem;outline:none;transition:border-color 140ms}.ds-field:hover{border-color:var(--ink,#14161a)}.ds-field:focus{border-color:var(--ink,#14161a);outline:2px solid var(--signal,#ff4a1c);outline-offset:1px}"
+    },
+    {
+      "name": "Zone Tag",
+      "kind": "chip",
+      "refersTo": "zone-tag",
+      "description": "Boxed condensed tag citing a panel's grid zone.",
+      "html": "<span class=\"ds-zone-tag\">B2</span>",
+      "css": ".ds-zone-tag{display:inline-block;font-family:var(--font-cond,'Barlow Condensed'),sans-serif;font-weight:600;font-size:.75rem;letter-spacing:.1em;padding:1px 6px;border:1px solid var(--ink,#14161a);color:var(--ink,#14161a)}"
+    },
+    {
+      "name": "Panel Head",
+      "kind": "nav",
+      "refersTo": "panel-head",
+      "description": "42px ruled panel header with title and zone tag.",
+      "html": "<div class=\"ds-head\"><span class=\"ds-title\">Requirements</span><span class=\"ds-tag\">A1</span></div>",
+      "css": ".ds-head{display:flex;align-items:center;gap:.75rem;min-height:42px;padding:0 14px;border-bottom:1px solid var(--rule,#c8cbd0);background:var(--paper,#f6f5f1)}.ds-title{font-family:var(--font-cond,'Barlow Condensed'),sans-serif;font-weight:600;font-size:1.05rem;letter-spacing:.02em;color:var(--ink,#14161a)}.ds-tag{margin-left:auto;font-family:var(--font-cond,'Barlow Condensed'),sans-serif;font-weight:600;font-size:.75rem;letter-spacing:.1em;padding:1px 6px;border:1px solid var(--ink,#14161a)}"
+    },
+    {
+      "name": "Stage Track (live)",
+      "kind": "custom",
+      "refersTo": "stage",
+      "description": "Signature: pale-orange track with a round chip crossing while a stage is live.",
+      "html": "<div class=\"ds-stage\"><div class=\"ds-bar\"><span class=\"ds-chip\"></span></div><span class=\"ds-stage-label\">Diagram</span></div>",
+      "css": ".ds-stage{display:grid;gap:6px;position:relative}.ds-bar{position:relative;height:6px;background:color-mix(in srgb,var(--signal,#ff4a1c) 22%,transparent)}.ds-chip{position:absolute;top:-3px;left:0;width:12px;height:12px;border-radius:50%;background:var(--signal,#ff4a1c);border:1px solid var(--ink,#14161a);animation:ds-cross 1.6s cubic-bezier(0.65,0,0.35,1) infinite alternate}@keyframes ds-cross{from{left:0}to{left:calc(100% - 12px)}}.ds-stage-label{font-family:var(--font-cond,'Barlow Condensed'),sans-serif;font-weight:600;font-size:.78rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink,#14161a)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Drafting Sheet",
+    "overview": "The workspace is an engineering drawing sheet, not a dashboard of cards. Structure comes from 1px hairlines, a lettered and numbered zone grid, and a single signal orange. Light is warm paper with near-black ink; dark is a graphite sheet with chalk ink and the same orange. Corners are square, there are no shadows, no gradients and no glow.",
+    "keyCharacteristics": [
+      "One hairline system: 1px rules, no card borders, no radius.",
+      "One signal colour, reserved for the primary action, the live or finished stage, selection and focus.",
+      "Condensed grotesk for headings and labels, plain Barlow for reading, mono only for code and the log.",
+      "Zone letters A-D across and numbers 1-2 down rule the margins on desktop.",
+      "Empty drawing areas carry corner registration marks instead of illustrations."
+    ],
+    "rules": [
+      { "name": "The One Signal Rule", "body": "Orange marks only what is acting or acted on: the Generate button, a live or done stage, selection, focus. It never decorates headings, links or backgrounds.", "section": "colors" },
+      { "name": "The Ink-On-Orange Rule", "body": "Orange fills carry ink text (#14161a) in both themes.", "section": "colors" },
+      { "name": "The Tabular Rule", "body": "Counts and figures use tabular numerals (.tnum).", "section": "typography" },
+      { "name": "The Two-Voice Rule", "body": "Condensed for naming and labelling, Barlow for sentences; do not mix within a line.", "section": "typography" },
+      { "name": "The No-Shadow Rule", "body": "Nothing floats; separation is a 1px line or a 1px gap.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do separate panels with a 1px gap over #c8cbd0, and keep every border 1px.",
+      "Do use signal orange only for action, live or done state, selection and focus.",
+      "Do use ink text on orange fills and keep colour changes on buttons instant.",
+      "Do use condensed uppercase labels with 0.08-0.1em tracking for field and stage labels; Barlow for sentences.",
+      "Do show unavailable states with hatching and empty areas with registration marks.",
+      "Do respect prefers-reduced-motion."
+    ],
+    "donts": [
+      "Don't use rounded corners, shadows, gradients, glow or glass.",
+      "Don't wrap content in cards; use zones.",
+      "Don't use orange for headings, links or decoration.",
+      "Don't use mono outside code and the log.",
+      "Don't use white text on orange."
+    ]
+  }
+}

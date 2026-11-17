@@ -29,3 +29,8 @@ class ResultRepositoryPort(ABC):
 
     @abstractmethod
     async def get_scaffold(self, document_id: str) -> ProjectScaffold | None: ...
+
+    @abstractmethod
+    async def clear(self, document_id: str) -> None:
+        """Delete every stored result for a document (called when a new run starts)."""
+        ...

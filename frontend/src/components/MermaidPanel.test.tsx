@@ -36,7 +36,7 @@ describe("MermaidPanel", () => {
     const { rerender } = render(<MermaidPanel isProcessing={false} />);
     expect(screen.getByText(/Diagrams will appear here/)).toBeInTheDocument();
     rerender(<MermaidPanel isProcessing={true} />);
-    expect(screen.getByText(/Generating architecture diagrams/)).toBeInTheDocument();
+    expect(screen.getByText(/Drawing diagrams/)).toBeInTheDocument();
   });
 
   it("renders the first diagram and lets the user switch", async () => {

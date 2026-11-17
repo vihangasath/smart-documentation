@@ -1,8 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { FileText, Upload, X, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
-
+import { AlertCircle, CheckCircle2, FileText, Loader2, Upload, X } from "lucide-react";
 import { errorMessage as toMessage, uploadDocument } from "@/lib/api";
 
 interface InputPanelProps {
@@ -48,6 +47,8 @@ export default function InputPanel({ value, onChange, onDocumentUploaded }: Inpu
     onDocumentUploaded?.("", "");
   };
 
+  const attached = uploadStatus === "success" && uploadedFilename;
+
   return (
     <>
       <input
@@ -59,115 +60,85 @@ export default function InputPanel({ value, onChange, onDocumentUploaded }: Inpu
         id="srs-file-input"
       />
 
-      {/* Panel header */}
-      <div
-        className="px-5 py-4 border-b flex items-center justify-between bg-[var(--bg-card)]"
-        style={{ borderColor: "var(--border-color)" }}
-      >
-        <div className="flex items-center gap-2">
-          <FileText className="w-4 h-4 text-blue-500" />
-          <h2 className="font-semibold text-sm" style={{ color: "var(--text-primary)" }}>
-            Provide Requirements
-          </h2>
-        </div>
-        
+      <div className="panel-head">
+        <FileText className="w-4 h-4" aria-hidden />
+        <h2 className="panel-title">Requirements</h2>
+        <span className="zone-tag" aria-label="Zone A1">A1</span>
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 p-5 flex flex-col gap-4 overflow-y-auto bg-[var(--bg-primary)] relative">
-        
-        {/* Upload Zone (The "Uploading Button") */}
-        <div className="shrink-0 w-full">
-          {uploadStatus === "success" && uploadedFilename ? (
-            <div className="relative flex items-center gap-4 p-4 border rounded-xl bg-green-500/10 border-green-500/30 transition-all shadow-sm">
-              <div className="w-10 h-10 bg-green-500/20 rounded-full flex items-center justify-center shrink-0">
-                <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-sm font-semibold text-green-700 dark:text-green-400 mb-0.5 truncate">
-                  {uploadedFilename}
-                </h3>
-                <p className="text-xs text-green-600/80 dark:text-green-400/80">
-                  Document attached. Anything you type below is sent as extra instructions.
-                </p>
-              </div>
-              <button
-                onClick={clearFile}
-                className="p-2 shrink-0 rounded-lg hover:bg-green-500/20 text-green-700 dark:text-green-400 transition-colors"
-                title="Remove file"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          ) : (
-            <div 
-              onClick={() => {
-                if (uploadStatus !== "uploading") fileInputRef.current?.click();
-              }}
-              className={`
-                group relative flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-xl cursor-pointer transition-all duration-200
-                ${uploadStatus === "uploading" ? "opacity-70 cursor-wait bg-blue-50/50 dark:bg-blue-900/10 border-blue-400" : "hover:bg-blue-50/50 dark:hover:bg-blue-900/10 hover:border-blue-400 hover:shadow-sm"}
-              `}
-              style={{ 
-                borderColor: uploadStatus === "uploading" ? "#60a5fa" : "var(--border-color)", 
-                background: uploadStatus === "uploading" ? "" : "var(--bg-card)" 
-              }}
-            >
-              <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-3 transition-colors ${uploadStatus === "uploading" ? "bg-blue-100 dark:bg-blue-900/40" : "bg-blue-50 dark:bg-blue-900/20 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/40"}`}>
-                {uploadStatus === "uploading" ? (
-                  <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
-                ) : (
-                  <Upload className="w-6 h-6 text-blue-500" />
-                )}
-              </div>
-              <h3 className="text-sm font-semibold mb-1" style={{ color: "var(--text-primary)" }}>
-                {uploadStatus === "uploading" ? "Uploading Document..." : "Click to Upload SRS Document"}
-              </h3>
-              <p className="text-xs text-center max-w-[280px]" style={{ color: "var(--text-muted)" }}>
-                Attach a PDF, Word (.docx), Markdown, or Text file.
+      <div className="flex-1 min-h-0 p-4 flex flex-col gap-3 overflow-y-auto">
+        {attached ? (
+          <div className="flex items-center gap-3 p-3 border" style={{ borderColor: "var(--ink)" }}>
+            <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: "var(--ok)" }} aria-hidden />
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold truncate">{uploadedFilename}</p>
+              <p className="text-sm" style={{ color: "var(--ink-3)" }}>
+                Attached. Text below is sent as extra instructions.
               </p>
             </div>
-          )}
-        </div>
+            <button onClick={clearFile} className="icon-btn" title="Remove file" aria-label="Remove file">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploadStatus === "uploading"}
+            className="group flex items-center gap-4 p-4 text-left transition-colors hover:bg-[var(--paper-2)] disabled:cursor-wait"
+            style={{ border: "1px dashed var(--ink)" }}
+          >
+            <span
+              className="grid place-items-center w-11 h-11 shrink-0 border"
+              style={{ borderColor: "var(--ink)" }}
+            >
+              {uploadStatus === "uploading" ? (
+                <Loader2 className="w-5 h-5 animate-spin" aria-hidden />
+              ) : (
+                <Upload className="w-5 h-5 transition-transform group-hover:-translate-y-0.5" aria-hidden />
+              )}
+            </span>
+            <span>
+              <span className="block font-semibold">
+                {uploadStatus === "uploading" ? "Uploading document…" : "Click to Upload SRS Document"}
+              </span>
+              <span className="block text-sm" style={{ color: "var(--ink-3)" }}>
+                Attach a PDF, Word (.docx), Markdown, or Text file.
+              </span>
+            </span>
+          </button>
+        )}
 
         {uploadStatus === "error" && errorMessage && (
           <div
             role="alert"
-            className="flex items-start gap-2 px-3 py-2 text-xs rounded-lg border"
-            style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444", borderColor: "rgba(239,68,68,0.25)" }}
+            className="flex items-start gap-2 p-3 text-sm border"
+            style={{ borderColor: "var(--danger)", color: "var(--danger)" }}
           >
-            <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden />
             <span>{errorMessage}</span>
           </div>
         )}
 
-        {/* Text Area Zone */}
-        <div className="flex-1 flex flex-col relative rounded-xl border shadow-sm transition-all focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500/50"
-          style={{ background: "var(--bg-card)", borderColor: "var(--border-color)" }}
-        >
+        <div className="flex-1 flex flex-col min-h-[120px]">
+          <label htmlFor="srs-text" className="field-label mb-1.5">
+            {attached ? "Extra instructions" : "Or type requirements"}
+          </label>
           <textarea
+            id="srs-text"
             value={value}
             onChange={(e) => onChange(e.target.value)}
             placeholder={
-              uploadStatus === "success" && uploadedFilename
-                ? "Optional: Add any extra instructions or context here to guide the architecture generation..."
-                : "Or simply type your requirements here. What kind of system do you want to build?"
+              attached
+                ? "Optional: guide the architecture, for example “focus on the booking flow”."
+                : "What kind of system do you want to build? Who uses it and what can they do?"
             }
-            className="w-full flex-1 bg-transparent resize-none outline-none p-4 leading-relaxed text-sm"
-            style={{ color: "var(--text-primary)" }}
+            className="field flex-1 resize-none leading-relaxed"
           />
-          
-          {/* Character count footer */}
-          <div className="px-4 py-2 flex justify-end items-center border-t border-transparent bg-transparent">
-            <div
-              className="text-[11px] font-mono px-2 py-0.5 rounded-full"
-              style={{ background: "var(--bg-primary)", color: "var(--text-muted)", border: "1px solid var(--border-color)" }}
-            >
-              {value.length} chars
-            </div>
-          </div>
+          <p className="mt-1.5 text-right text-xs tnum" style={{ color: "var(--ink-3)" }}>
+            {value.length} chars
+          </p>
         </div>
-
       </div>
     </>
   );

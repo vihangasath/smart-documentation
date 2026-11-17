@@ -125,7 +125,7 @@ def build_container(settings: Settings, llm: LLMPort | None = None) -> Container
         ScaffolderAgent(llm, knowledge), ZipBuilder(), settings.outputs_dir, events
     )
     orchestrator = Orchestrator(
-        parse_usecase, diagrams_usecase, scaffold_usecase, events
+        parse_usecase, diagrams_usecase, scaffold_usecase, events, results
     )
     job_service = JobService(
         jobs,

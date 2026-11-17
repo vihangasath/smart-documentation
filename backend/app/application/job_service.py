@@ -63,6 +63,8 @@ class JobService:
             instructions=instructions,
         )
         await self._jobs.save(job)
+        # A new run starts from nothing, so a poller never sees the previous run's output.
+        await self._results.clear(document.id)
         # Resets the document's event replay buffer so streams never mix runs.
         await self._events.publish(
             AgentEvent(

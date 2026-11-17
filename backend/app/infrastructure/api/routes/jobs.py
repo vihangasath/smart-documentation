@@ -30,9 +30,6 @@ async def get_job(
     job = await container.jobs.get(job_id)
     if not job or job.owner_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found.")
-    if job.is_active:
-        return to_job_response(job)
-
     return to_job_response(
         job,
         schema=await container.results.get_schema(job.document_id),
