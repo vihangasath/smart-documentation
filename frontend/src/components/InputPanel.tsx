@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { FileText, Upload, X, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { errorMessage as toMessage, uploadDocument } from "@/lib/api";
 
 interface InputPanelProps {
   value: string;
@@ -26,36 +26,15 @@ export default function InputPanel({ value, onChange, onDocumentUploaded }: Inpu
     setUploadStatus("uploading");
     setErrorMessage(null);
     setUploadedFilename(null);
-
-    if (file.type === "text/plain" || file.name.endsWith(".md") || file.name.endsWith(".txt")) {
-      const reader = new FileReader();
-      reader.onload = (ev) => { onChange(ev.target?.result as string ?? ""); };
-      reader.readAsText(file);
-    } else {
-      onChange("");
-    }
+    onDocumentUploaded?.("", "");
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const response = await fetch(`${API_URL}/api/upload`, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: "Upload failed" }));
-        throw new Error(errorData.detail ?? `HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
-      setUploadedFilename(file.name);
+      const data = await uploadDocument(file);
+      setUploadedFilename(data.filename || file.name);
       setUploadStatus("success");
       onDocumentUploaded?.(data.document_id, file.name);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Upload failed";
-      setErrorMessage(msg);
+      setErrorMessage(toMessage(err, "Upload failed"));
       setUploadStatus("error");
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -66,7 +45,6 @@ export default function InputPanel({ value, onChange, onDocumentUploaded }: Inpu
     setUploadStatus("idle");
     setUploadedFilename(null);
     setErrorMessage(null);
-    onChange("");
     onDocumentUploaded?.("", "");
   };
 
@@ -75,7 +53,7 @@ export default function InputPanel({ value, onChange, onDocumentUploaded }: Inpu
       <input
         ref={fileInputRef}
         type="file"
-        accept=".pdf,.md,.txt,.doc,.docx,text/plain,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        accept=".pdf,.md,.markdown,.txt,.docx,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         className="hidden"
         onChange={handleFileSelect}
         id="srs-file-input"
@@ -93,19 +71,6 @@ export default function InputPanel({ value, onChange, onDocumentUploaded }: Inpu
           </h2>
         </div>
         
-        <div className="flex items-center gap-2">
-          {/* Status badges for top right if needed, but we'll show them in the main area now */}
-          {uploadStatus === "error" && (
-            <span
-              className="flex items-center gap-1 px-2 py-1 text-xs rounded-md border"
-              style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444", borderColor: "rgba(239,68,68,0.25)" }}
-              title={errorMessage ?? "Error"}
-            >
-              <AlertCircle className="w-3 h-3" />
-              {errorMessage}
-            </span>
-          )}
-        </div>
       </div>
 
       {/* Main Content Area */}
@@ -113,7 +78,7 @@ export default function InputPanel({ value, onChange, onDocumentUploaded }: Inpu
         
         {/* Upload Zone (The "Uploading Button") */}
         <div className="shrink-0 w-full">
-          {uploadStatus === "success" && uploadedFilename && [".pdf", ".doc", ".docx"].some((ext) => uploadedFilename.endsWith(ext)) ? (
+          {uploadStatus === "success" && uploadedFilename ? (
             <div className="relative flex items-center gap-4 p-4 border rounded-xl bg-green-500/10 border-green-500/30 transition-all shadow-sm">
               <div className="w-10 h-10 bg-green-500/20 rounded-full flex items-center justify-center shrink-0">
                 <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
@@ -123,7 +88,7 @@ export default function InputPanel({ value, onChange, onDocumentUploaded }: Inpu
                   {uploadedFilename}
                 </h3>
                 <p className="text-xs text-green-600/80 dark:text-green-400/80">
-                  Document attached successfully. The backend will analyze it.
+                  Document attached. Anything you type below is sent as extra instructions.
                 </p>
               </div>
               <button
@@ -159,11 +124,22 @@ export default function InputPanel({ value, onChange, onDocumentUploaded }: Inpu
                 {uploadStatus === "uploading" ? "Uploading Document..." : "Click to Upload SRS Document"}
               </h3>
               <p className="text-xs text-center max-w-[280px]" style={{ color: "var(--text-muted)" }}>
-                Attach a PDF, Word, or Text file.
+                Attach a PDF, Word (.docx), Markdown, or Text file.
               </p>
             </div>
           )}
         </div>
+
+        {uploadStatus === "error" && errorMessage && (
+          <div
+            role="alert"
+            className="flex items-start gap-2 px-3 py-2 text-xs rounded-lg border"
+            style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444", borderColor: "rgba(239,68,68,0.25)" }}
+          >
+            <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
 
         {/* Text Area Zone */}
         <div className="flex-1 flex flex-col relative rounded-xl border shadow-sm transition-all focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500/50"
@@ -175,7 +151,7 @@ export default function InputPanel({ value, onChange, onDocumentUploaded }: Inpu
             placeholder={
               uploadStatus === "success" && uploadedFilename
                 ? "Optional: Add any extra instructions or context here to guide the architecture generation..."
-                : "Or simply explain your requirements here. What kind of system do you want to build?"
+                : "Or simply type your requirements here. What kind of system do you want to build?"
             }
             className="w-full flex-1 bg-transparent resize-none outline-none p-4 leading-relaxed text-sm"
             style={{ color: "var(--text-primary)" }}

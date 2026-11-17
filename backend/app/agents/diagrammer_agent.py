@@ -2,28 +2,40 @@
 Diagrammer Agent — Mermaid.js specialist that converts extracted schemas
 into visual diagrams.
 
-Generates Class Diagrams, ER Diagrams, and Sequence Diagrams from the
+Generates ER, Class, Sequence and Architecture diagrams from the
 structured output of the Parser Agent.
 """
 
 from __future__ import annotations
 
+import asyncio
+import logging
+import re
+from collections.abc import Mapping
+
 from app.agents.base_agent import BaseAgent
-from app.domain.ports.llm_port import LLMPort
+from app.domain.entities.diagram import Diagram, DiagramSet, DiagramType
 from app.domain.entities.extracted_schema import ExtractedSchema
-from app.domain.entities.diagram import Diagram, DiagramType, DiagramSet
-from app.infrastructure.adapters.mermaid_validator import MermaidValidator
+from app.domain.errors import DomainError
+from app.domain.ports.llm_port import LLMPort
+from app.domain.ports.mermaid_validator_port import MermaidValidatorPort
+
+logger = logging.getLogger(__name__)
+
+_FENCE_RE = re.compile(r"```[a-zA-Z]*[ \t]*\n(.*?)```", re.DOTALL)
 
 
 class DiagrammerAgent(BaseAgent):
     """
     Specialized agent for generating validated Mermaid.js diagrams.
 
-    Supports: Class, ER, Sequence, Flowchart, and Architecture diagrams.
+    Generates ER, Class, Sequence and Architecture diagrams (Flowcharts are
+    available on demand through ``generate_single``).
     Each diagram is validated against Mermaid syntax rules before output.
     """
 
     AGENT_NAME = "DiagrammerAgent"
+    ANCHOR_SECTIONS = ("Mermaid Rules",)
 
     SYSTEM_INSTRUCTIONS: dict[DiagramType, str] = {
         DiagramType.CLASS: """You are an expert Mermaid.js diagrammer specializing in Class Diagrams.
@@ -95,13 +107,16 @@ Rules:
 Return ONLY the raw Mermaid code. No markdown fences, no explanation.""",
     }
 
-    def __init__(self, llm: LLMPort) -> None:
-        super().__init__(llm)
-        self._validator = MermaidValidator()
+    def __init__(
+        self,
+        llm: LLMPort,
+        validator: MermaidValidatorPort,
+        knowledge: Mapping[str, str] | None = None,
+    ) -> None:
+        super().__init__(llm, knowledge)
+        self._validator = validator
 
-    async def generate_all(
-        self, schema: ExtractedSchema
-    ) -> DiagramSet:
+    async def generate_all(self, schema: ExtractedSchema) -> DiagramSet:
         """
         Generate all applicable diagram types for the given schema.
 
@@ -115,16 +130,36 @@ Return ONLY the raw Mermaid code. No markdown fences, no explanation.""",
             DiagramType.ER,
             DiagramType.CLASS,
             DiagramType.SEQUENCE,
+            DiagramType.ARCHITECTURE,
         ]
 
+        # Concurrency is capped inside the LLM adapter.
+        results = await asyncio.gather(
+            *(self.generate_single(schema, dtype) for dtype in diagram_types),
+            return_exceptions=True,
+        )
+
         diagrams: list[Diagram] = []
-        for dtype in diagram_types:
-            diagram = await self.generate_single(schema, dtype)
-            diagrams.append(diagram)
+        errors: list[str] = []
+        for dtype, result in zip(diagram_types, results, strict=True):
+            if isinstance(result, Diagram):
+                diagrams.append(result)
+                continue
+            if not isinstance(result, DomainError):
+                logger.error("Diagram generation failed for %s", dtype, exc_info=result)
+            message = (
+                result.user_message
+                if isinstance(result, DomainError)
+                else "unexpected error"
+            )
+            errors.append(f"Could not generate the {dtype.value} diagram: {message}")
+
+        if not diagrams:
+            first = next(r for r in results if isinstance(r, BaseException))
+            raise first
 
         return DiagramSet(
-            document_id=schema.document_id,
-            diagrams=diagrams,
+            document_id=schema.document_id, diagrams=diagrams, errors=errors
         )
 
     async def generate_single(
@@ -147,7 +182,7 @@ Return ONLY the raw Mermaid code. No markdown fences, no explanation.""",
             self.SYSTEM_INSTRUCTIONS[DiagramType.CLASS],
         )
 
-        schema_context = schema.model_dump_json(indent=2)
+        schema_context = schema.model_dump_json(indent=2, exclude={"raw_analysis"})
 
         prompt = self._build_prompt(
             task_prompt=(
@@ -161,7 +196,7 @@ Return ONLY the raw Mermaid code. No markdown fences, no explanation.""",
             prompt=prompt,
             system_instruction=system_instruction,
             temperature=0.4,
-            max_tokens=4096,
+            max_tokens=8192,
         )
 
         # Clean up any markdown fences
@@ -173,8 +208,11 @@ Return ONLY the raw Mermaid code. No markdown fences, no explanation.""",
         # If invalid, attempt one retry with error feedback
         if not is_valid:
             mermaid_code = await self._retry_with_feedback(
-                schema_context, diagram_type, system_instruction,
-                mermaid_code, errors,
+                schema_context,
+                diagram_type,
+                system_instruction,
+                mermaid_code,
+                errors,
             )
             is_valid, errors = self._validator.validate(mermaid_code)
 
@@ -210,18 +248,19 @@ Return ONLY the raw Mermaid code. No markdown fences, no explanation.""",
             prompt=retry_prompt,
             system_instruction=system_instruction,
             temperature=0.2,
-            max_tokens=4096,
+            max_tokens=8192,
         )
         return self._clean_mermaid_output(result)
 
     def _clean_mermaid_output(self, raw: str) -> str:
-        """Remove markdown code fences from LLM output."""
+        """Remove markdown code fences (and chatter around them) from LLM output."""
         cleaned = raw.strip()
-        if cleaned.startswith("```mermaid"):
-            cleaned = cleaned[len("```mermaid") :]
-        elif cleaned.startswith("```"):
-            first_newline = cleaned.index("\n") if "\n" in cleaned else len(cleaned)
-            cleaned = cleaned[first_newline + 1 :]
-        if cleaned.endswith("```"):
-            cleaned = cleaned[:-3]
-        return cleaned.strip()
+        fence = _FENCE_RE.search(cleaned)
+        if fence:
+            return fence.group(1).strip()
+        return (
+            cleaned.removeprefix("```mermaid")
+            .removeprefix("```")
+            .removesuffix("```")
+            .strip()
+        )

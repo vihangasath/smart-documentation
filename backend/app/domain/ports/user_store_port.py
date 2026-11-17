@@ -12,16 +12,11 @@ from app.domain.entities.user import User
 
 
 class UserStorePort(ABC):
-    """
-    Port for user storage operations.
-
-    The application layer depends on this abstraction.
-    Concrete adapters (e.g., InMemoryUserStore) implement it.
-    """
+    """Port for user storage operations."""
 
     @abstractmethod
     async def save(self, user: User) -> None:
-        """Persist a new user."""
+        """Insert or update a user."""
         ...
 
     @abstractmethod

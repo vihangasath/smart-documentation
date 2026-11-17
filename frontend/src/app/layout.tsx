@@ -19,6 +19,9 @@ export const metadata: Metadata = {
   description: "Structify — AI-Powered System Design. Transform SRS documents into architecture diagrams and boilerplate code.",
 };
 
+// Runs before first paint so the saved theme is applied without a flash.
+const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem("sda-theme");if(t!=="light"){document.documentElement.classList.add("dark")}}catch(e){document.documentElement.classList.add("dark")}})();`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -27,8 +30,12 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body className="min-h-full flex flex-col">
         <ThemeProvider>
           <AuthProvider>

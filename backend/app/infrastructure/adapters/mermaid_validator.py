@@ -1,99 +1,76 @@
 """
 Mermaid Validator — validates Mermaid.js syntax using heuristic checks.
 
-For production, this could be extended to use a headless browser with
-mermaid-cli, but the heuristic approach covers the common cases well
-and keeps the backend dependency-light.
+This is a lightweight, dependency-free first line of defence (header, brackets,
+empty body). The frontend renderer remains the final authority on syntax.
 """
 
 from __future__ import annotations
 
 import re
 
+from app.domain.ports.mermaid_validator_port import MermaidValidatorPort
 
-class MermaidValidator:
-    """
-    Validates Mermaid.js diagram syntax using pattern-based heuristics.
+_HEADER_RE = re.compile(
+    r"^(?:classDiagram(?:-v2)?|erDiagram|sequenceDiagram|flowchart|graph|"
+    r"stateDiagram(?:-v2)?|architecture-beta|pie|gantt|gitGraph|mindmap|timeline|"
+    r"journey|quadrantChart|requirementDiagram|C4Context|sankey-beta|xychart-beta|"
+    r"block-beta)\b"
+)
+_QUOTED_RE = re.compile(r'"[^"\n]*"')
+# Crow's-foot relationship operators such as ||--o{ , }o--|| , |o..o{
+_ER_OPERATOR_RE = re.compile(r"[|}o][|o]?(?:--|\.\.)[|o]?[|{o]")
+_FRONTMATTER_RE = re.compile(r"\A---\s*\n.*?\n---\s*\n", re.DOTALL)
 
-    Checks for:
-    - Valid diagram type declaration
-    - Balanced brackets and braces
-    - Common syntax errors
-    """
 
-    VALID_DIAGRAM_TYPES = {
-        "classDiagram",
-        "sequenceDiagram",
-        "erDiagram",
-        "stateDiagram",
-        "stateDiagram-v2",
-        "flowchart",
-        "graph",
-        "architecture-beta",
-        "pie",
-        "gantt",
-        "gitGraph",
-        "mindmap",
-        "timeline",
-    }
+class MermaidValidator(MermaidValidatorPort):
+    """Validates Mermaid.js diagram syntax using pattern-based heuristics."""
 
     def validate(self, mermaid_code: str) -> tuple[bool, list[str]]:
-        """
-        Validate Mermaid syntax.
-
-        Args:
-            mermaid_code: Raw Mermaid code string.
-
-        Returns:
-            Tuple of (is_valid, list_of_error_messages).
-        """
+        """Return ``(is_valid, error_messages)`` for the given Mermaid code."""
         errors: list[str] = []
         code = mermaid_code.strip()
-
         if not code:
             return False, ["Empty diagram code."]
 
-        # Check diagram type declaration
-        first_line = code.split("\n")[0].strip()
-        diagram_type_found = False
-        for dtype in self.VALID_DIAGRAM_TYPES:
-            if first_line.startswith(dtype) or first_line.startswith(f"{dtype} "):
-                diagram_type_found = True
-                break
-        # Also check for "graph TD", "graph LR", etc.
-        if first_line.startswith("graph "):
-            diagram_type_found = True
-
-        if not diagram_type_found:
-            errors.append(
-                f"Invalid diagram type on first line: '{first_line}'. "
-                f"Expected one of: {sorted(self.VALID_DIAGRAM_TYPES)}"
-            )
-
-        # Check balanced brackets
-        bracket_pairs = {"(": ")", "[": "]", "{": "}"}
-        stack: list[str] = []
-        for char in code:
-            if char in bracket_pairs:
-                stack.append(bracket_pairs[char])
-            elif char in bracket_pairs.values():
-                if not stack or stack[-1] != char:
-                    errors.append(f"Unbalanced bracket: '{char}'")
-                    break
-                stack.pop()
-        if stack:
-            errors.append(
-                f"Unclosed brackets detected. Expected: {''.join(stack)}"
-            )
-
-        # Check for empty diagram body
+        code = _FRONTMATTER_RE.sub("", code, count=1).strip()
         lines = [
             line.strip()
             for line in code.split("\n")
             if line.strip() and not line.strip().startswith("%%")
         ]
+        if not lines:
+            return False, ["Empty diagram code."]
+
+        header = _HEADER_RE.match(lines[0])
+        if not header:
+            errors.append(f"Invalid diagram type on first line: '{lines[0]}'.")
         if len(lines) < 2:
             errors.append("Diagram appears to have no content (only type declaration).")
 
-        is_valid = len(errors) == 0
-        return is_valid, errors
+        diagram_type = header.group(0) if header else ""
+        # Free text in sequence diagrams (notes, messages) may contain stray brackets.
+        if diagram_type != "sequenceDiagram":
+            errors.extend(self._check_brackets("\n".join(lines[1:]), diagram_type))
+
+        return len(errors) == 0, errors
+
+    @staticmethod
+    def _check_brackets(body: str, diagram_type: str) -> list[str]:
+        text = _QUOTED_RE.sub('""', body)
+        if diagram_type == "erDiagram":
+            text = _ER_OPERATOR_RE.sub(" -- ", text)
+
+        pairs = {"(": ")", "[": "]", "{": "}"}
+        closers = set(pairs.values())
+        stack: list[str] = []
+        for char in text:
+            if char in pairs:
+                stack.append(pairs[char])
+            elif char in closers:
+                if not stack or stack[-1] != char:
+                    return [f"Unbalanced bracket: '{char}'"]
+                stack.pop()
+        if stack:
+            return [f"Unclosed brackets detected. Expected: {''.join(reversed(stack))}"]
+        return []

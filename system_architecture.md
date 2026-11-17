@@ -1,4 +1,4 @@
-The Smart Documentation Architect follows a Modular Agentic Orchestration pattern. Instead of a linear script, the system functions as a digital "firm" where a central lead coordinates specialized workers.
+Structify follows a Modular Agentic Orchestration pattern. Instead of a linear script, the system functions as a digital "firm" where a central lead coordinates specialized workers.
 
 🏗️ System Architecture Overview
 1. The Interface (The "Skin")
@@ -28,6 +28,8 @@ Scaffolder Agent: A Python specialist that maps the architecture to a directory 
 Serverless Compute: To handle the "bursty" nature of AI generation, workers can run on serverless platforms (like Modal). This allows you to scale to 10+ parallel agents instantly and scale back to zero when idle.
 
 Persistence Layer: Temporary storage for the generated file tree before it is zipped for download or pushed to a version control system.
+
+> **Implementation status.** Built: the Next.js bento-grid interface, SSE agent logs, the FastAPI orchestrator, the Parser/Diagrammer/Scaffolder agents (Diagrammer and Scaffolder run in parallel), knowledge-anchor injection, a heuristic Mermaid validator and ZIP delivery. **Future work**: a dedicated Validator agent, serverless workers (Modal), a pattern-selection step, and pushing the boilerplate to a version-control repository.
 
 🔄 The Technical Data Flow
 Input: User drops an SRS file into the Bento Grid.

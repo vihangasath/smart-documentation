@@ -1,24 +1,22 @@
 """
-Diagrams Route — GET /api/diagrams/{document_id}
+Diagrams Routes — GET/POST /api/diagrams/{document_id}
 
-Returns the generated Mermaid diagrams for a document.
-Also supports generating diagrams on-demand if only analysis has been run.
+GET only reads stored diagrams. POST (re)generates them from the stored analysis.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.infrastructure.api.schemas.api_schemas import (
-    DiagramSetResponse,
-    DiagramSchema,
-    ErrorResponse,
+from app.infrastructure.api.dependencies import (
+    Container,
+    OwnedDocument,
+    get_container,
+    get_owned_document,
+    rate_limit_pipeline,
 )
-from app.infrastructure.api.routes.analyze import (
-    get_schema_store,
-    get_diagram_store,
-)
-from app.infrastructure.api.dependencies import get_diagrams_usecase
+from app.infrastructure.api.schemas.api_schemas import DiagramSetResponse, ErrorResponse
+from app.infrastructure.api.schemas.mappers import to_diagram_set_response
 
 router = APIRouter(prefix="/api", tags=["Diagrams"])
 
@@ -26,69 +24,40 @@ router = APIRouter(prefix="/api", tags=["Diagrams"])
 @router.get(
     "/diagrams/{document_id}",
     response_model=DiagramSetResponse,
-    responses={
-        404: {"model": ErrorResponse, "description": "Diagrams not found"},
-    },
-    summary="Get diagrams for a document",
-    description="Retrieve generated Mermaid.js diagrams. Generates them on-demand if analysis exists.",
+    responses={404: {"model": ErrorResponse, "description": "Diagrams not found"}},
+    summary="Get stored diagrams for a document",
 )
-async def get_diagrams(document_id: str) -> DiagramSetResponse:
-    """
-    Get or generate Mermaid diagrams for a document.
-
-    If diagrams have already been generated (via /api/analyze/full),
-    returns cached results. Otherwise, generates them on-demand
-    from the analysis schema.
-    """
-    diagram_store = get_diagram_store()
-    schema_store = get_schema_store()
-
-    # Return cached diagrams if available
-    if document_id in diagram_store:
-        ds = diagram_store[document_id]
-        return DiagramSetResponse(
-            document_id=ds.document_id,
-            diagrams=[
-                DiagramSchema(
-                    id=d.id,
-                    diagram_type=d.diagram_type.value,
-                    title=d.title,
-                    mermaid_code=d.mermaid_code,
-                    is_valid=d.is_valid,
-                    validation_errors=d.validation_errors,
-                )
-                for d in ds.diagrams
-            ],
-            all_valid=ds.all_valid,
+async def get_diagrams(
+    owned: OwnedDocument = Depends(get_owned_document),
+    container: Container = Depends(get_container),
+) -> DiagramSetResponse:
+    diagrams = await container.results.get_diagrams(owned.document.id)
+    if diagrams is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "No diagrams yet. Run the analysis or POST to this endpoint to generate them.",
         )
+    return to_diagram_set_response(diagrams)
 
-    # Generate on-demand if schema exists
-    if document_id in schema_store:
-        schema = schema_store[document_id]
-        diagrams_usecase = get_diagrams_usecase()
-        ds = await diagrams_usecase.execute(schema)
-        diagram_store[document_id] = ds
 
-        return DiagramSetResponse(
-            document_id=ds.document_id,
-            diagrams=[
-                DiagramSchema(
-                    id=d.id,
-                    diagram_type=d.diagram_type.value,
-                    title=d.title,
-                    mermaid_code=d.mermaid_code,
-                    is_valid=d.is_valid,
-                    validation_errors=d.validation_errors,
-                )
-                for d in ds.diagrams
-            ],
-            all_valid=ds.all_valid,
+@router.post(
+    "/diagrams/{document_id}",
+    response_model=DiagramSetResponse,
+    responses={
+        409: {"model": ErrorResponse, "description": "No analysis to draw from"}
+    },
+    dependencies=[Depends(rate_limit_pipeline)],
+    summary="Generate diagrams from the stored analysis",
+)
+async def generate_diagrams(
+    owned: OwnedDocument = Depends(get_owned_document),
+    container: Container = Depends(get_container),
+) -> DiagramSetResponse:
+    schema = await container.results.get_schema(owned.document.id)
+    if schema is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Analyze the document first (POST /api/analyze)."
         )
-
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail=(
-            f"No diagrams or analysis found for document '{document_id}'. "
-            "Run /api/analyze first."
-        ),
-    )
+    diagrams = await container.diagrams_usecase.execute(schema)
+    await container.results.save_diagrams(diagrams)
+    return to_diagram_set_response(diagrams)

@@ -7,7 +7,7 @@ This is a pure domain object with no infrastructure dependencies.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
 
@@ -21,6 +21,7 @@ class User(BaseModel):
         name: Display name of the user.
         email: Unique email address (used for login).
         hashed_password: bcrypt-hashed password.
+        token_version: Incremented to revoke every token issued so far.
         created_at: UTC timestamp of registration.
     """
 
@@ -28,6 +29,5 @@ class User(BaseModel):
     name: str
     email: str
     hashed_password: str
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    token_version: int = 0
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

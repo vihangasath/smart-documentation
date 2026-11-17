@@ -1,27 +1,27 @@
 """
-Scaffold Route — GET /api/scaffold/{document_id}/download
+Scaffold Routes — GET/POST /api/scaffold/{document_id} and the ZIP download.
 
-Serves the generated project scaffold as a downloadable ZIP file.
-Also supports generating scaffold on-demand.
+GET only reads stored results. POST (re)generates the scaffold from the stored
+analysis.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 
-from app.infrastructure.api.schemas.api_schemas import (
-    ScaffoldResponse,
-    GeneratedFileSchema,
-    ErrorResponse,
+from app.domain.paths import slugify
+from app.infrastructure.api.dependencies import (
+    Container,
+    OwnedDocument,
+    get_container,
+    get_owned_document,
+    rate_limit_pipeline,
 )
-from app.infrastructure.api.routes.analyze import (
-    get_schema_store,
-    get_scaffold_store,
-)
-from app.infrastructure.api.dependencies import get_scaffold_usecase
+from app.infrastructure.api.schemas.api_schemas import ErrorResponse, ScaffoldResponse
+from app.infrastructure.api.schemas.mappers import to_scaffold_response
 
 router = APIRouter(prefix="/api", tags=["Scaffold"])
 
@@ -29,113 +29,71 @@ router = APIRouter(prefix="/api", tags=["Scaffold"])
 @router.get(
     "/scaffold/{document_id}",
     response_model=ScaffoldResponse,
-    responses={
-        404: {"model": ErrorResponse, "description": "Scaffold not found"},
-    },
-    summary="Get scaffold metadata",
-    description="Get the project scaffold details and file listing.",
+    responses={404: {"model": ErrorResponse, "description": "Scaffold not found"}},
+    summary="Get stored scaffold details and file listing",
 )
-async def get_scaffold(document_id: str) -> ScaffoldResponse:
-    """
-    Get scaffold metadata and file listing for a document.
-
-    If scaffold hasn't been generated, generates it on-demand from the schema.
-    """
-    scaffold_store = get_scaffold_store()
-    schema_store = get_schema_store()
-
-    # Return cached scaffold if available
-    if document_id in scaffold_store:
-        scaffold = scaffold_store[document_id]
-        return ScaffoldResponse(
-            document_id=scaffold.document_id,
-            project_name=scaffold.project_name,
-            directory_tree=scaffold.directory_tree,
-            file_count=len(scaffold.files),
-            files=[
-                GeneratedFileSchema(
-                    path=f.path,
-                    content=f.content,
-                    language=f.language,
-                )
-                for f in scaffold.files
-            ],
-            download_url=f"/api/scaffold/{document_id}/download",
+async def get_scaffold(
+    owned: OwnedDocument = Depends(get_owned_document),
+    container: Container = Depends(get_container),
+) -> ScaffoldResponse:
+    scaffold = await container.results.get_scaffold(owned.document.id)
+    if scaffold is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "No scaffold yet. Run the analysis or POST to this endpoint to generate one.",
         )
+    return to_scaffold_response(scaffold)
 
-    # Generate on-demand if schema exists
-    if document_id in schema_store:
-        schema = schema_store[document_id]
-        scaffold_usecase = get_scaffold_usecase()
-        scaffold = await scaffold_usecase.execute(schema)
-        scaffold_store[document_id] = scaffold
 
-        return ScaffoldResponse(
-            document_id=scaffold.document_id,
-            project_name=scaffold.project_name,
-            directory_tree=scaffold.directory_tree,
-            file_count=len(scaffold.files),
-            files=[
-                GeneratedFileSchema(
-                    path=f.path,
-                    content=f.content,
-                    language=f.language,
-                )
-                for f in scaffold.files
-            ],
-            download_url=f"/api/scaffold/{document_id}/download",
+@router.post(
+    "/scaffold/{document_id}",
+    response_model=ScaffoldResponse,
+    responses={
+        409: {"model": ErrorResponse, "description": "No analysis to build from"}
+    },
+    dependencies=[Depends(rate_limit_pipeline)],
+    summary="Generate the scaffold from the stored analysis",
+)
+async def generate_scaffold(
+    owned: OwnedDocument = Depends(get_owned_document),
+    container: Container = Depends(get_container),
+) -> ScaffoldResponse:
+    schema = await container.results.get_schema(owned.document.id)
+    if schema is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Analyze the document first (POST /api/analyze)."
         )
-
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail=(
-            f"No scaffold or analysis found for document '{document_id}'. "
-            "Run /api/analyze first."
-        ),
-    )
+    scaffold = await container.scaffold_usecase.execute(schema)
+    await container.results.save_scaffold(scaffold)
+    return to_scaffold_response(scaffold)
 
 
 @router.get(
     "/scaffold/{document_id}/download",
     response_class=FileResponse,
-    responses={
-        404: {"model": ErrorResponse, "description": "ZIP not found"},
-    },
+    responses={404: {"model": ErrorResponse, "description": "ZIP not found"}},
     summary="Download scaffold as ZIP",
-    description="Download the generated project scaffold as a ZIP archive.",
 )
-async def download_scaffold(document_id: str) -> FileResponse:
-    """
-    Download the generated project scaffold as a ZIP file.
-
-    The ZIP must have been previously generated via /api/analyze/full
-    or /api/scaffold/{document_id}.
-    """
-    scaffold_store = get_scaffold_store()
-
-    if document_id not in scaffold_store:
+async def download_scaffold(
+    owned: OwnedDocument = Depends(get_owned_document),
+    container: Container = Depends(get_container),
+) -> FileResponse:
+    scaffold = await container.results.get_scaffold(owned.document.id)
+    if scaffold is None or not scaffold.zip_path:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No scaffold found for document '{document_id}'.",
+            status.HTTP_404_NOT_FOUND, "No scaffold ZIP for this document."
         )
 
-    scaffold = scaffold_store[document_id]
-
-    if not scaffold.zip_path:
+    zip_path = Path(scaffold.zip_path).resolve()
+    outputs_dir = container.settings.outputs_dir.resolve()
+    if outputs_dir not in zip_path.parents or not zip_path.is_file():
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="ZIP file has not been generated yet.",
-        )
-
-    zip_path = Path(scaffold.zip_path)
-    if not zip_path.exists():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="ZIP file not found on disk.",
+            status.HTTP_404_NOT_FOUND,
+            "The ZIP is no longer available. Regenerate the scaffold.",
         )
 
     return FileResponse(
         path=str(zip_path),
         media_type="application/zip",
-        filename=f"{scaffold.project_name}.zip",
+        filename=f"{slugify(scaffold.project_name, default='project')}.zip",
     )

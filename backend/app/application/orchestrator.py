@@ -1,23 +1,32 @@
 """
 Orchestrator — The "Lead" Agent that coordinates the entire pipeline.
 
-Decomposes an SRS upload into sub-tasks, routes them to specialized agents,
-and manages the full analysis → diagrams → scaffold workflow.
+Runs the Parser, then the Diagrammer and Scaffolder concurrently (both only
+need the extracted schema), and reports progress through the event publisher.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
+import asyncio
+import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import TypeVar
 
-from app.domain.entities.srs_document import SRSDocument
-from app.domain.entities.extracted_schema import ExtractedSchema
-from app.domain.entities.diagram import DiagramSet
-from app.domain.entities.project_scaffold import ProjectScaffold
-from app.application.parse_srs_usecase import ParseSRSUseCase
 from app.application.generate_diagrams_usecase import GenerateDiagramsUseCase
+from app.application.parse_srs_usecase import ParseSRSUseCase
 from app.application.scaffold_project_usecase import ScaffoldProjectUseCase
-from app.application.event_bus import event_bus, AgentEvent, EventType
+from app.domain.entities.diagram import DiagramSet
+from app.domain.entities.events import AgentEvent, EventType
+from app.domain.entities.extracted_schema import ExtractedSchema
+from app.domain.entities.project_scaffold import ProjectScaffold
+from app.domain.entities.srs_document import SRSDocument
+from app.domain.errors import DomainError
+from app.domain.ports.event_publisher_port import EventPublisherPort
+
+logger = logging.getLogger(__name__)
+T = TypeVar("T")
 
 
 @dataclass
@@ -36,141 +45,127 @@ class PipelineResult:
 
 
 class Orchestrator:
-    """
-    The Lead Agent — coordinates Parser, Diagrammer, and Scaffolder agents.
-
-    This is the central brain described in the system architecture:
-    'A FastAPI backend acts as the brain. It doesn't just process data;
-    it manages the Swarm.'
-    """
+    """The Lead Agent — coordinates Parser, Diagrammer, and Scaffolder agents."""
 
     def __init__(
         self,
         parse_usecase: ParseSRSUseCase,
         diagrams_usecase: GenerateDiagramsUseCase,
         scaffold_usecase: ScaffoldProjectUseCase,
+        events: EventPublisherPort,
     ) -> None:
         self._parse = parse_usecase
         self._diagrams = diagrams_usecase
         self._scaffold = scaffold_usecase
+        self._events = events
+
+    async def _emit(
+        self,
+        event_type: EventType,
+        document_id: str,
+        message: str,
+        agent: str = "Lead",
+        **data,
+    ) -> None:
+        await self._events.publish(
+            AgentEvent(
+                event_type=event_type,
+                agent_name=agent,
+                document_id=document_id,
+                message=message,
+                data=data,
+            )
+        )
+
+    async def _stage(
+        self,
+        agent: str,
+        document_id: str,
+        errors: list[str],
+        call: Callable[[], Awaitable[T]],
+    ) -> T | None:
+        """Run one stage; turn any failure into a user-safe error message."""
+        try:
+            return await call()
+        except DomainError as exc:
+            message = f"{agent} failed: {exc.user_message}"
+            logger.warning("%s failed for document %s: %s", agent, document_id, exc)
+        except Exception:  # noqa: BLE001 - never leak internals to the client
+            message = f"{agent} failed unexpectedly."
+            logger.exception("%s crashed for document %s", agent, document_id)
+        errors.append(message)
+        await self._emit(EventType.AGENT_ERROR, document_id, message, agent=agent)
+        return None
 
     async def run_full_pipeline(
         self,
         document: SRSDocument,
-        file_path: Path,
+        file_path: Path | None,
+        instructions: str = "",
     ) -> PipelineResult:
         """
         Execute the complete SRS → Architecture pipeline.
 
-        Stages:
-        1. Parse & extract entities (Parser Agent)
-        2. Generate Mermaid diagrams (Diagrammer Agent)
-        3. Scaffold project boilerplate (Scaffolder Agent)
-
-        Args:
-            document: The uploaded SRS document entity.
-            file_path: Path to the file on disk.
-
-        Returns:
-            PipelineResult with all outputs and any errors.
+        The caller (the job service) is expected to have published
+        ``PIPELINE_START``; this method publishes the terminal event.
         """
         result = PipelineResult(document=document)
-
-        await event_bus.publish(
-            AgentEvent(
-                event_type=EventType.PIPELINE_START,
-                document_id=document.id,
-                message=f"Starting full pipeline for '{document.filename}'...",
-            )
+        doc_id = document.id
+        await self._emit(
+            EventType.AGENT_PROGRESS,
+            doc_id,
+            f"Starting full pipeline for '{document.filename}'...",
         )
 
         # ── Stage 1: Parse SRS ──────────────────────────────────────────
-        try:
-            result.schema = await self._parse.execute(document, file_path)
-        except Exception as e:
-            error_msg = f"Parser Agent failed: {str(e)}"
-            result.errors.append(error_msg)
-            await event_bus.publish(
-                AgentEvent(
-                    event_type=EventType.AGENT_ERROR,
-                    agent_name="ParserAgent",
-                    document_id=document.id,
-                    message=error_msg,
-                )
+        result.schema = await self._stage(
+            "ParserAgent",
+            doc_id,
+            result.errors,
+            lambda: self._parse.execute(document, file_path, instructions),
+        )
+        if result.schema is not None and not result.schema.entities:
+            result.errors.append(
+                "No entities could be extracted. The document may not describe a system "
+                "to model; try adding more detail."
+            )
+            result.schema = None
+
+        if result.schema is None:
+            await self._emit(
+                EventType.PIPELINE_ERROR,
+                doc_id,
+                "Pipeline stopped: the requirements could not be analyzed.",
+                errors=result.errors,
             )
             return result
 
-        if not result.schema or not result.schema.entities:
-            result.errors.append(
-                "Warning: Parser extracted 0 entities. "
-                "The document may not contain enough structured content, "
-                "or the LLM response could not be parsed. Continuing pipeline with available data."
-            )
-            # Only abort fully if we have no schema at all
-            if not result.schema:
-                return result
-
-
-        # ── Stage 2: Generate Diagrams ──────────────────────────────────
-        try:
-            result.diagrams = await self._diagrams.execute(result.schema)
-        except Exception as e:
-            error_msg = f"Diagrammer Agent failed: {str(e)}"
-            result.errors.append(error_msg)
-            await event_bus.publish(
-                AgentEvent(
-                    event_type=EventType.AGENT_ERROR,
-                    agent_name="DiagrammerAgent",
-                    document_id=document.id,
-                    message=error_msg,
-                )
-            )
-            # Continue — diagrams are not blocking for scaffold
-
-        # ── Stage 3: Scaffold Project ───────────────────────────────────
-        try:
-            result.scaffold = await self._scaffold.execute(result.schema)
-        except Exception as e:
-            error_msg = f"Scaffolder Agent failed: {str(e)}"
-            result.errors.append(error_msg)
-            await event_bus.publish(
-                AgentEvent(
-                    event_type=EventType.AGENT_ERROR,
-                    agent_name="ScaffolderAgent",
-                    document_id=document.id,
-                    message=error_msg,
-                )
-            )
+        # ── Stages 2 & 3: Diagrams and Scaffold run concurrently ────────
+        schema = result.schema
+        diagrams, scaffold = await asyncio.gather(
+            self._stage(
+                "DiagrammerAgent",
+                doc_id,
+                result.errors,
+                lambda: self._diagrams.execute(schema),
+            ),
+            self._stage(
+                "ScaffolderAgent",
+                doc_id,
+                result.errors,
+                lambda: self._scaffold.execute(schema),
+            ),
+        )
+        result.diagrams, result.scaffold = diagrams, scaffold
+        if diagrams is not None:
+            result.errors.extend(diagrams.errors)
 
         # ── Pipeline Complete ───────────────────────────────────────────
         status = "completed successfully" if result.success else "completed with errors"
-        await event_bus.publish(
-            AgentEvent(
-                event_type=EventType.PIPELINE_COMPLETE,
-                document_id=document.id,
-                message=f"Pipeline {status}.",
-                data={"errors": result.errors},
-            )
+        await self._emit(
+            EventType.PIPELINE_COMPLETE,
+            doc_id,
+            f"Pipeline {status}.",
+            errors=result.errors,
         )
-
         return result
-
-    async def run_parse_only(
-        self,
-        document: SRSDocument,
-        file_path: Path,
-    ) -> ExtractedSchema:
-        """Run only the parsing stage."""
-        return await self._parse.execute(document, file_path)
-
-    async def run_diagrams_only(
-        self, schema: ExtractedSchema
-    ) -> DiagramSet:
-        """Run only the diagram generation stage."""
-        return await self._diagrams.execute(schema)
-
-    async def run_scaffold_only(
-        self, schema: ExtractedSchema
-    ) -> ProjectScaffold:
-        """Run only the scaffolding stage."""
-        return await self._scaffold.execute(schema)

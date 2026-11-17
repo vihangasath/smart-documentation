@@ -16,7 +16,6 @@ class DiagramType(StrEnum):
     CLASS = "class"
     SEQUENCE = "sequence"
     ER = "er"
-    STATE = "state"
     ARCHITECTURE = "architecture"
     FLOWCHART = "flowchart"
 
@@ -49,6 +48,8 @@ class DiagramSet(BaseModel):
 
     document_id: str
     diagrams: list[Diagram] = Field(default_factory=list)
+    #: Non-fatal problems (e.g. one diagram type failed to generate).
+    errors: list[str] = Field(default_factory=list)
 
     @property
     def all_valid(self) -> bool:

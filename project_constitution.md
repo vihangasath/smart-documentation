@@ -1,4 +1,4 @@
-# Project Constitution: Smart Documentation Architect
+# Project Constitution: Structify
 
 ## 1. Core Mission
 To transform unstructured technical requirements (SRS) into structured, 
@@ -9,6 +9,7 @@ deployable system architectures and visual diagrams with zero manual boilerplate
 - **Pydantic:** All data models must use Pydantic v2 for strict validation.
 - **Diagramming:** Mermaid.js (must be valid syntax for frontend rendering).
 - **Frontend:** Next.js with Tailwind CSS.
+- **Name:** The product is called Structify.
 - **Styling:** Glassmorphism.
 
 ## 3. Architecture Principles
@@ -17,5 +18,5 @@ deployable system architectures and visual diagrams with zero manual boilerplate
 - **API Style:** RESTful with automatic OpenAPI documentation.
 
 ## 4. Constraint & Safety
-- Agents must never delete existing user-uploaded SRS files.
+- Agents must never delete existing user-uploaded SRS files. Only the scheduled retention job (default: files after 24 hours, database records after 30 days; configurable) removes old data.
 - No external API calls are allowed unless defined in the Link phase.

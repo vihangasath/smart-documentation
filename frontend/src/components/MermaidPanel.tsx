@@ -1,42 +1,216 @@
 "use client";
 
-import { Layout, Maximize2, Minimize2, Download, ImageDown } from "lucide-react";
+import { AlertTriangle, Download, ImageDown, Layout, Loader2, Maximize2, Minimize2 } from "lucide-react";
 import dynamic from "next/dynamic";
-import { motion, AnimatePresence } from "framer-motion";
-import { useState, useRef, useEffect } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
+import { downloadScaffold, errorMessage } from "@/lib/api";
+import type { Diagram, DiagramSetResponse, ScaffoldResponse } from "@/types/api";
 import type { MermaidDiagramHandle } from "./MermaidDiagram";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const MermaidDiagram = dynamic(() => import("./MermaidDiagram"), { ssr: false });
 
-interface Diagram {
-  title: string;
-  mermaid_code: string;
-}
-
-interface ScaffoldData {
-  download_url?: string;
-}
-
 interface MermaidPanelProps {
   isProcessing: boolean;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  data?: any;
-  scaffoldData?: ScaffoldData;
+  data?: DiagramSetResponse | null;
+  scaffoldData?: ScaffoldResponse | null;
 }
 
+// ─── Module-level components (defining them inside the panel would remount the
+// diagram — and reset zoom/pan — on every state change) ───────────────────────
+
+interface HeaderControlsProps {
+  diagrams: Diagram[];
+  current?: Diagram;
+  onSelect: (id: string) => void;
+  inModal?: boolean;
+  isFullscreen: boolean;
+  onToggleFullscreen: () => void;
+  onDownloadPng: () => void;
+  isDownloadingPng: boolean;
+  scaffold?: ScaffoldResponse | null;
+  onDownloadZip: () => void;
+  isDownloadingZip: boolean;
+}
+
+function HeaderControls({
+  diagrams,
+  current,
+  onSelect,
+  inModal,
+  isFullscreen,
+  onToggleFullscreen,
+  onDownloadPng,
+  isDownloadingPng,
+  scaffold,
+  onDownloadZip,
+  isDownloadingZip,
+}: HeaderControlsProps) {
+  return (
+    <div className="flex items-center gap-2">
+      {diagrams.length > 0 && (
+        <select
+          aria-label="Select diagram"
+          className="text-xs rounded-md px-2 py-1 outline-none transition-colors"
+          style={{
+            background: "var(--input-bg)",
+            border: "1px solid var(--border-color-strong)",
+            color: "var(--text-primary)",
+          }}
+          value={current?.id ?? ""}
+          onChange={(e) => onSelect(e.target.value)}
+        >
+          {diagrams.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.is_valid ? "" : "⚠ "}
+              {d.title}
+            </option>
+          ))}
+        </select>
+      )}
+
+      {current && (
+        <button
+          id={inModal ? "download-png-modal" : "download-png-btn"}
+          onClick={onDownloadPng}
+          disabled={isDownloadingPng}
+          title="Download diagram as PNG"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all
+            disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{
+            background: "rgba(59,130,246,0.12)",
+            border: "1px solid rgba(59,130,246,0.3)",
+            color: "#3b82f6",
+          }}
+        >
+          <ImageDown className="w-3.5 h-3.5" />
+          {isDownloadingPng ? "Saving…" : "PNG"}
+        </button>
+      )}
+
+      {scaffold?.download_url && (
+        <button
+          id={inModal ? "download-zip-modal" : "download-zip-btn"}
+          onClick={onDownloadZip}
+          disabled={isDownloadingZip}
+          title="Download the generated project as a ZIP"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-white
+            bg-green-600 hover:bg-green-700 transition-colors shadow-sm
+            disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isDownloadingZip ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Download className="w-3.5 h-3.5" />
+          )}
+          ZIP
+        </button>
+      )}
+
+      <button
+        id={inModal ? "minimize-diagram" : "maximize-diagram"}
+        onClick={onToggleFullscreen}
+        aria-label={isFullscreen ? "Exit fullscreen" : "Expand to fullscreen"}
+        className="p-1.5 rounded-lg transition-all hover:scale-105"
+        style={{
+          background: isFullscreen ? "rgba(59,130,246,0.15)" : "var(--bg-card-hover)",
+          border: `1px solid ${isFullscreen ? "rgba(59,130,246,0.4)" : "var(--border-color)"}`,
+        }}
+        title={isFullscreen ? "Exit fullscreen (Esc)" : "Expand to fullscreen"}
+      >
+        {isFullscreen ? (
+          <Minimize2 className="w-3.5 h-3.5" style={{ color: "#3b82f6" }} />
+        ) : (
+          <Maximize2 className="w-3.5 h-3.5" style={{ color: "var(--text-muted)" }} />
+        )}
+      </button>
+    </div>
+  );
+}
+
+function Warnings({ diagram, notes }: { diagram?: Diagram; notes: string[] }) {
+  const lines = [
+    ...(diagram && !diagram.is_valid
+      ? [
+          `This diagram may contain syntax errors${
+            diagram.validation_errors.length ? `: ${diagram.validation_errors.join("; ")}` : "."
+          }`,
+        ]
+      : []),
+    ...notes,
+  ];
+  if (!lines.length) return null;
+  return (
+    <div
+      role="status"
+      className="flex items-start gap-2 px-4 py-2 text-xs border-b"
+      style={{
+        background: "rgba(234,179,8,0.1)",
+        color: "#ca8a04",
+        borderColor: "rgba(234,179,8,0.25)",
+      }}
+    >
+      <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+      <div className="space-y-0.5">
+        {lines.map((l) => (
+          <p key={l}>{l}</p>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+interface DiagramAreaProps {
+  isProcessing: boolean;
+  diagram?: Diagram;
+  hasDiagrams: boolean;
+  refHandle: React.Ref<MermaidDiagramHandle>;
+}
+
+function DiagramArea({ isProcessing, diagram, hasDiagrams, refHandle }: DiagramAreaProps) {
+  return (
+    <div className="flex-1 overflow-hidden flex items-center justify-center bg-[var(--input-bg)] relative">
+      {isProcessing && !hasDiagrams ? (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="flex flex-col items-center gap-4"
+        >
+          <div className="w-10 h-10 border-4 border-blue-500/25 border-t-blue-500 rounded-full animate-spin" />
+          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+            Generating architecture diagrams…
+          </p>
+        </motion.div>
+      ) : diagram ? (
+        <div className="w-full h-full flex items-center justify-center">
+          <MermaidDiagram ref={refHandle} chart={diagram.mermaid_code} />
+        </div>
+      ) : (
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+          Diagrams will appear here after generation.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ─── Panel ──────────────────────────────────────────────────────────────────
+
 export default function MermaidPanel({ isProcessing, data, scaffoldData }: MermaidPanelProps) {
-  const [selectedDiagramIndex, setSelectedDiagramIndex] = useState(0);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
+  const [isDownloadingPng, setIsDownloadingPng] = useState(false);
+  const [isDownloadingZip, setIsDownloadingZip] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Refs for the diagram instances inside and outside the modal
   const panelDiagramRef = useRef<MermaidDiagramHandle>(null);
   const modalDiagramRef = useRef<MermaidDiagramHandle>(null);
 
-  const diagrams = data?.diagrams || [];
-  const currentDiagram = diagrams[selectedDiagramIndex];
+  const diagrams = data?.diagrams ?? [];
+  // Falls back to the first diagram whenever the selection no longer exists
+  // (for example after a new run), so no reset effect is needed.
+  const current = diagrams.find((d) => d.id === selectedId) ?? diagrams[0];
 
   // Close fullscreen on Escape key
   useEffect(() => {
@@ -48,114 +222,50 @@ export default function MermaidPanel({ isProcessing, data, scaffoldData }: Merma
   }, []);
 
   const handleDownloadPng = async () => {
-    if (!currentDiagram) return;
-    setIsDownloading(true);
+    if (!current) return;
+    setIsDownloadingPng(true);
+    setActionError(null);
     const ref = isFullscreen ? modalDiagramRef : panelDiagramRef;
-    const safeName = (currentDiagram.title || "diagram").replace(/\s+/g, "_").toLowerCase();
+    const safeName = (current.title || "diagram").replace(/\s+/g, "_").toLowerCase();
     try {
       await ref.current?.downloadPng(`${safeName}.png`);
+    } catch (err) {
+      setActionError(errorMessage(err, "PNG export failed."));
     } finally {
-      setIsDownloading(false);
+      setIsDownloadingPng(false);
     }
   };
 
-  const HeaderControls = ({ inModal }: { inModal?: boolean }) => (
-    <div className="flex items-center gap-2">
-      {diagrams.length > 0 && (
-        <select
-          className="text-xs rounded-md px-2 py-1 outline-none transition-colors"
-          style={{
-            background: "var(--input-bg)",
-            border: "1px solid var(--border-color-strong)",
-            color: "var(--text-primary)",
-          }}
-          value={selectedDiagramIndex}
-          onChange={(e) => setSelectedDiagramIndex(Number(e.target.value))}
-        >
-          {diagrams.map((d: Diagram, i: number) => (
-            <option key={i} value={i}>{d.title}</option>
-          ))}
-        </select>
-      )}
+  const handleDownloadZip = async () => {
+    if (!scaffoldData?.download_url) return;
+    setIsDownloadingZip(true);
+    setActionError(null);
+    try {
+      await downloadScaffold(scaffoldData.download_url, `${scaffoldData.project_name || "project"}.zip`);
+    } catch (err) {
+      setActionError(errorMessage(err, "ZIP download failed."));
+    } finally {
+      setIsDownloadingZip(false);
+    }
+  };
 
-      {/* Download PNG button */}
-      {currentDiagram && (
-        <button
-          id={inModal ? "download-png-modal" : "download-png-btn"}
-          onClick={handleDownloadPng}
-          disabled={isDownloading}
-          title="Download diagram as PNG"
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all
-            disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{
-            background: "rgba(59,130,246,0.12)",
-            border: "1px solid rgba(59,130,246,0.3)",
-            color: "#3b82f6",
-          }}
-        >
-          <ImageDown className="w-3.5 h-3.5" />
-          {isDownloading ? "Saving…" : "PNG"}
-        </button>
-      )}
-
-      {/* Download ZIP button */}
-      {scaffoldData?.download_url && (
-        <a
-          href={`${API_URL}${scaffoldData.download_url}`}
-          download
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-white
-            bg-green-600 hover:bg-green-700 transition-colors shadow-sm"
-        >
-          <Download className="w-3.5 h-3.5" />
-          ZIP
-        </a>
-      )}
-
-      {/* Maximize / Minimize button */}
-      <button
-        id={inModal ? "minimize-diagram" : "maximize-diagram"}
-        onClick={() => setIsFullscreen((v) => !v)}
-        className="p-1.5 rounded-lg transition-all hover:scale-105"
-        style={{
-          background: isFullscreen ? "rgba(59,130,246,0.15)" : "var(--bg-card-hover)",
-          border: `1px solid ${isFullscreen ? "rgba(59,130,246,0.4)" : "var(--border-color)"}`,
-        }}
-        title={isFullscreen ? "Exit fullscreen (Esc)" : "Expand to fullscreen"}
-      >
-        {isFullscreen
-          ? <Minimize2 className="w-3.5 h-3.5" style={{ color: "#3b82f6" }} />
-          : <Maximize2 className="w-3.5 h-3.5" style={{ color: "var(--text-muted)" }} />
-        }
-      </button>
-    </div>
+  const controls = (inModal: boolean) => (
+    <HeaderControls
+      diagrams={diagrams}
+      current={current}
+      onSelect={setSelectedId}
+      inModal={inModal}
+      isFullscreen={isFullscreen}
+      onToggleFullscreen={() => setIsFullscreen((v) => !v)}
+      onDownloadPng={handleDownloadPng}
+      isDownloadingPng={isDownloadingPng}
+      scaffold={scaffoldData}
+      onDownloadZip={handleDownloadZip}
+      isDownloadingZip={isDownloadingZip}
+    />
   );
 
-  const DiagramArea = ({ refHandle }: { refHandle: React.Ref<MermaidDiagramHandle> }) => (
-    <div
-      className="flex-1 overflow-hidden flex items-center justify-center bg-[var(--input-bg)] relative"
-    >
-      {isProcessing && diagrams.length === 0 ? (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="flex flex-col items-center gap-4"
-        >
-          <div className="w-10 h-10 border-4 border-blue-500/25 border-t-blue-500 rounded-full animate-spin" />
-          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-            Generating architecture diagrams…
-          </p>
-        </motion.div>
-      ) : currentDiagram ? (
-        <div className="w-full h-full flex items-center justify-center">
-          <MermaidDiagram ref={refHandle} chart={currentDiagram.mermaid_code} />
-        </div>
-      ) : (
-        <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-          Diagrams will appear here after generation.
-        </p>
-      )}
-    </div>
-  );
+  const notes = [...(data?.errors ?? []), ...(actionError ? [actionError] : [])];
 
   return (
     <>
@@ -170,10 +280,17 @@ export default function MermaidPanel({ isProcessing, data, scaffoldData }: Merma
             Architecture Diagrams
           </h2>
         </div>
-        <HeaderControls />
+        {controls(false)}
       </div>
 
-      <DiagramArea refHandle={panelDiagramRef} />
+      <Warnings diagram={current} notes={notes} />
+
+      <DiagramArea
+        isProcessing={isProcessing}
+        diagram={current}
+        hasDiagrams={diagrams.length > 0}
+        refHandle={panelDiagramRef}
+      />
 
       {/* ── Fullscreen modal ── */}
       <AnimatePresence>
@@ -187,7 +304,6 @@ export default function MermaidPanel({ isProcessing, data, scaffoldData }: Merma
             className="fixed inset-0 z-50 flex flex-col"
             style={{ background: "var(--bg-primary)" }}
           >
-            {/* Modal header */}
             <div
               className="flex items-center justify-between px-6 py-4 border-b shrink-0"
               style={{
@@ -199,28 +315,40 @@ export default function MermaidPanel({ isProcessing, data, scaffoldData }: Merma
               <div className="flex items-center gap-3">
                 <Layout className="w-5 h-5 text-blue-500" />
                 <h2 className="font-semibold text-base" style={{ color: "var(--text-primary)" }}>
-                  {currentDiagram?.title || "Architecture Diagram"}
+                  {current?.title || "Architecture Diagram"}
                 </h2>
-                <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "rgba(59,130,246,0.12)", color: "#3b82f6", border: "1px solid rgba(59,130,246,0.3)" }}>
+                <span
+                  className="text-xs px-2 py-0.5 rounded-full"
+                  style={{
+                    background: "rgba(59,130,246,0.12)",
+                    color: "#3b82f6",
+                    border: "1px solid rgba(59,130,246,0.3)",
+                  }}
+                >
                   Fullscreen
                 </span>
               </div>
-              <HeaderControls inModal />
+              {controls(true)}
             </div>
 
-            {/* Modal body — diagram fills the rest */}
+            <Warnings diagram={current} notes={notes} />
+
             <div className="flex-1 overflow-hidden relative flex items-center justify-center bg-[var(--input-bg)]">
-              {currentDiagram ? (
-                <MermaidDiagram ref={modalDiagramRef} chart={currentDiagram.mermaid_code} />
+              {current ? (
+                <MermaidDiagram ref={modalDiagramRef} chart={current.mermaid_code} />
               ) : (
                 <p style={{ color: "var(--text-muted)" }}>No diagram selected.</p>
               )}
             </div>
 
-            {/* ESC hint */}
             <div className="shrink-0 text-center py-2 text-xs" style={{ color: "var(--text-muted)" }}>
-              Press <kbd className="px-1.5 py-0.5 rounded text-[10px] font-mono mx-1"
-                style={{ background: "var(--bg-card)", border: "1px solid var(--border-color)" }}>Esc</kbd>
+              Press{" "}
+              <kbd
+                className="px-1.5 py-0.5 rounded text-[10px] font-mono mx-1"
+                style={{ background: "var(--bg-card)", border: "1px solid var(--border-color)" }}
+              >
+                Esc
+              </kbd>
               to close fullscreen
             </div>
           </motion.div>

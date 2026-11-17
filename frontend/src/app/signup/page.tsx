@@ -1,15 +1,14 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useEffect, useState, FormEvent } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { errorMessage, signup as signupRequest } from "@/lib/api";
 import ThemeToggle from "@/components/ThemeToggle";
 import { Loader2, AlertCircle, Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import { motion } from "framer-motion";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 function PasswordStrength({ password }: { password: string }) {
   const checks = [
@@ -36,8 +35,12 @@ function PasswordStrength({ password }: { password: string }) {
 }
 
 export default function SignupPage() {
-  const { login } = useAuth();
+  const { login, isAuthenticated } = useAuth();
   const router = useRouter();
+
+  useEffect(() => {
+    if (isAuthenticated) router.replace("/");
+  }, [isAuthenticated, router]);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -59,25 +62,18 @@ export default function SignupPage() {
       setError("Password must be at least 8 characters.");
       return;
     }
+    if (new TextEncoder().encode(password).length > 72) {
+      setError("Password must be at most 72 bytes long.");
+      return;
+    }
 
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/auth/signup`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.detail || "Sign up failed. Please try again.");
-      }
-
+      const data = await signupRequest(name.trim(), email, password);
       login(data.access_token, data.user);
       router.replace("/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
+      setError(errorMessage(err));
     } finally {
       setIsLoading(false);
     }

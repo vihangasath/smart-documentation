@@ -1,51 +1,49 @@
 """
-Events Route — GET /api/events (Server-Sent Events)
+Events Route — GET /api/events/{document_id} (Server-Sent Events)
 
-Real-time streaming of agent logs and pipeline status updates.
-The frontend subscribes to this endpoint to show the "Agent Logs"
-panel with live updates of what each agent is thinking/doing.
+Streams the agent log for ONE document the caller owns. Late subscribers first
+receive a replay of earlier events; the stream ends after the pipeline's
+terminal event.
 """
 
 from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends
 from sse_starlette.sse import EventSourceResponse
 
-from app.application.event_bus import event_bus
+from app.application.event_bus import TERMINAL_EVENTS
+from app.infrastructure.api.dependencies import (
+    Container,
+    OwnedDocument,
+    get_container,
+    get_owned_document,
+)
 
 router = APIRouter(prefix="/api", tags=["Events"])
 
 
 @router.get(
-    "/events",
-    summary="Subscribe to agent events (SSE)",
-    description="Server-Sent Events stream for real-time agent logs and pipeline status.",
+    "/events/{document_id}",
+    summary="Subscribe to a document's agent events (SSE)",
+    description=(
+        "Events: agent_start, agent_progress, agent_complete, agent_error, "
+        "pipeline_start, pipeline_complete, pipeline_error. Each carries "
+        "agent_name, document_id, message, data and an ISO timestamp."
+    ),
 )
-async def event_stream(request: Request) -> EventSourceResponse:
-    """
-    SSE endpoint for real-time agent event streaming.
-
-    The frontend connects to this endpoint and receives events as JSON:
-    - agent_start: An agent begins processing
-    - agent_progress: Progress update from an agent
-    - agent_complete: Agent finished successfully
-    - agent_error: Agent encountered an error
-    - pipeline_start: Full pipeline begins
-    - pipeline_complete: Full pipeline finished
-
-    Each event contains: event_type, agent_name, document_id, message, data, timestamp.
-    """
+async def event_stream(
+    owned: OwnedDocument = Depends(get_owned_document),
+    container: Container = Depends(get_container),
+) -> EventSourceResponse:
+    document_id = owned.document.id
+    bus = container.events
 
     async def event_generator():
-        queue = event_bus.subscribe()
+        queue = bus.subscribe(document_id)
         try:
-            async for event in event_bus.stream(queue):
-                # Check if client disconnected
-                if await request.is_disconnected():
-                    break
-
+            async for event in bus.stream(queue):
                 yield {
                     "event": event.event_type.value,
                     "data": json.dumps(
@@ -58,7 +56,9 @@ async def event_stream(request: Request) -> EventSourceResponse:
                         }
                     ),
                 }
+                if event.event_type in TERMINAL_EVENTS:
+                    break
         finally:
-            event_bus.unsubscribe(queue)
+            bus.unsubscribe(document_id, queue)
 
     return EventSourceResponse(event_generator())

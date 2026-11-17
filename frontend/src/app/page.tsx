@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import InputPanel from "@/components/InputPanel";
 import ExtractionPanel from "@/components/ExtractionPanel";
@@ -9,55 +9,82 @@ import AgentLogs from "@/components/AgentLogs";
 import AuthGuard from "@/components/AuthGuard";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useAuth } from "@/contexts/AuthContext";
+import { createTextDocument, errorMessage, getJob, startAnalysis } from "@/lib/api";
+import type { JobResponse } from "@/types/api";
 import { motion } from "framer-motion";
-import { Wand2, LogOut, User } from "lucide-react";
+import { AlertTriangle, LogOut, User, Wand2, X } from "lucide-react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const POLL_INTERVAL_MS = 2000;
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function Dashboard() {
   const { user, logout } = useAuth();
   const [isProcessing, setIsProcessing] = useState(false);
+  // Free text: the requirements themselves, or extra instructions when a file is attached.
   const [srsText, setSrsText] = useState("");
-  const [documentId, setDocumentId] = useState<string | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [pipelineData, setPipelineData] = useState<any>(null);
+  const [uploadedDocId, setUploadedDocId] = useState<string | null>(null);
+  const [job, setJob] = useState<JobResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // Which document's log stream to show; `runId` remounts the log panel per run.
+  const [streamDocId, setStreamDocId] = useState<string | null>(null);
+  const [runId, setRunId] = useState(0);
+
+  // Reuse the text document if the same text is generated twice.
+  const textDocRef = useRef<{ text: string; id: string } | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  const trimmed = srsText.trim();
+  const canGenerate = !isProcessing && (!!uploadedDocId || trimmed.length > 0);
 
   const handleGenerate = async () => {
-    if (!documentId) {
-      alert("Please upload an SRS document first.");
-      return;
-    }
+    if (!canGenerate) return;
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     setIsProcessing(true);
-    setPipelineData(null);
-
-    // Give the SSE stream a moment to connect so we don't miss the initial events
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    setError(null);
+    setJob(null);
 
     try {
-      const response = await fetch(`${API_URL}/api/analyze/full`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ document_id: documentId }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || `HTTP ${response.status}`);
+      let documentId = uploadedDocId;
+      let instructions = "";
+      if (documentId) {
+        instructions = trimmed;
+      } else if (textDocRef.current?.text === trimmed) {
+        documentId = textDocRef.current.id;
+      } else {
+        const doc = await createTextDocument(trimmed);
+        documentId = doc.document_id;
+        textDocRef.current = { text: trimmed, id: documentId };
       }
 
-      const data = await response.json();
-      setPipelineData(data);
+      const started = await startAnalysis(documentId, instructions);
+      setRunId((n) => n + 1);
+      setStreamDocId(documentId);
+
+      // The pipeline runs in the background; poll until it finishes.
+      let current = started;
+      while (current.status === "queued" || current.status === "running") {
+        await sleep(POLL_INTERVAL_MS);
+        if (controller.signal.aborted) return;
+        current = await getJob(started.job_id, controller.signal);
+      }
+      setJob(current);
+      if (current.status === "failed") {
+        setError(current.errors.join(" ") || "The analysis failed. Please try again.");
+      }
     } catch (err) {
-      console.error("Pipeline failed:", err);
-      alert(
-        "Pipeline failed: " +
-          (err instanceof Error ? err.message : String(err))
-      );
+      if (controller.signal.aborted) return;
+      setError(errorMessage(err, "The analysis failed. Please try again."));
     } finally {
-      setIsProcessing(false);
+      if (abortRef.current === controller) setIsProcessing(false);
     }
   };
+
+  const warnings = job && job.status === "completed" ? job.errors : [];
 
   return (
     <div
@@ -116,19 +143,12 @@ function Dashboard() {
             id="logout-button"
             onClick={logout}
             title="Sign out"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all
+              hover:!text-red-500 hover:!border-red-500/30"
             style={{
               background: "var(--bg-card)",
               border: "1px solid var(--border-color)",
               color: "var(--text-secondary)",
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.color = "#ef4444";
-              (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(239,68,68,0.3)";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.color = "var(--text-secondary)";
-              (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border-color)";
             }}
           >
             <LogOut className="w-3.5 h-3.5" />
@@ -140,6 +160,30 @@ function Dashboard() {
       {/* ── Main Content ────────────────────────────────────────────────── */}
       <main className="flex-1 p-4 md:p-6 overflow-hidden">
         <div className="max-w-[1400px] mx-auto h-full flex flex-col gap-4" style={{ minHeight: "calc(100vh - 5rem)" }}>
+
+          {(error || warnings.length > 0) && (
+            <div
+              role={error ? "alert" : "status"}
+              className="flex items-start gap-2 px-4 py-3 rounded-xl text-sm border"
+              style={
+                error
+                  ? { background: "rgba(239,68,68,0.1)", color: "#ef4444", borderColor: "rgba(239,68,68,0.25)" }
+                  : { background: "rgba(234,179,8,0.1)", color: "#ca8a04", borderColor: "rgba(234,179,8,0.25)" }
+              }
+            >
+              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+              <div className="flex-1 space-y-0.5">
+                {(error ? [error] : warnings).map((m) => (
+                  <p key={m}>{m}</p>
+                ))}
+              </div>
+              {error && (
+                <button onClick={() => setError(null)} aria-label="Dismiss error" className="shrink-0">
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          )}
 
           {/* ── Row 1: Input (left) + Extraction (right) ── */}
           <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0" style={{ flex: "0 0 auto", height: "clamp(360px, 45vh, 500px)" }}>
@@ -154,7 +198,7 @@ function Dashboard() {
               <InputPanel
                 value={srsText}
                 onChange={setSrsText}
-                onDocumentUploaded={(id) => setDocumentId(id || null)}
+                onDocumentUploaded={(id) => setUploadedDocId(id || null)}
               />
               {/* Generate button inside panel footer */}
               <div
@@ -164,7 +208,7 @@ function Dashboard() {
                 <button
                   id="generate-btn"
                   onClick={handleGenerate}
-                  disabled={isProcessing}
+                  disabled={!canGenerate}
                   className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl
                     font-medium text-sm text-white bg-blue-600 hover:bg-blue-700
                     transition-all shadow-md hover:shadow-lg
@@ -184,7 +228,7 @@ function Dashboard() {
               transition={{ delay: 0.1 }}
               className="glass-panel rounded-2xl overflow-hidden flex flex-col flex-1 min-w-0"
             >
-              <ExtractionPanel isProcessing={isProcessing} data={pipelineData?.analysis} />
+              <ExtractionPanel isProcessing={isProcessing} data={job?.analysis ?? undefined} />
             </motion.div>
           </div>
 
@@ -200,8 +244,8 @@ function Dashboard() {
             >
               <MermaidPanel
                 isProcessing={isProcessing}
-                data={pipelineData?.diagrams}
-                scaffoldData={pipelineData?.scaffold}
+                data={job?.diagrams}
+                scaffoldData={job?.scaffold}
               />
             </motion.div>
 
@@ -212,7 +256,7 @@ function Dashboard() {
               transition={{ delay: 0.2 }}
               className="glass-panel rounded-2xl overflow-hidden flex flex-col lg:w-[300px] lg:shrink-0"
             >
-              <AgentLogs isProcessing={isProcessing} documentId={documentId} />
+              <AgentLogs key={runId} isProcessing={isProcessing} documentId={streamDocId} />
             </motion.div>
           </div>
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from app.domain.entities.srs_document import SRSDocument, FileType
+from app.domain.entities.srs_document import FileType
 
 
 class FileParserPort(ABC):

@@ -1,19 +1,18 @@
-fastapi>=0.115.0
-uvicorn[standard]>=0.32.0
-gunicorn>=22.0.0
-pydantic>=2.0.0
-pydantic-settings>=2.0.0
-python-multipart>=0.0.12
-sse-starlette>=2.0.0
-google-genai>=1.0.0
-pymupdf>=1.25.0
-markdown-it-py>=3.0.0
-python-dotenv>=1.0.0
-aiofiles>=24.0.0
-python-docx>=1.0.0
-black>=24.0.0
-pytest>=8.0.0
-httpx>=0.28.0
-python-jose[cryptography]>=3.3.0
+# Runtime dependencies (direct deps pinned; keep in sync with pyproject.toml).
+# Dev/test tools live in requirements-dev.txt.
+fastapi==0.136.1
+uvicorn[standard]==0.46.0
+pydantic==2.13.3
+pydantic-settings==2.14.0
+python-multipart==0.0.27
+sse-starlette==3.4.1
+google-genai==1.75.0
+PyMuPDF==1.27.2.3
+python-docx==1.2.0
+aiofiles==25.1.0
+charset-normalizer==3.4.7
+email-validator==2.4.0
+SQLAlchemy==2.1.9
+psycopg[binary]>=3.2,<4
+PyJWT==2.15.1
 bcrypt==4.0.1
-

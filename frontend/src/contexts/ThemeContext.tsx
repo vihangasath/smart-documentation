@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useCallback, useContext, useMemo, useSyncExternalStore } from "react";
 
 type Theme = "light" | "dark";
 
@@ -9,45 +9,44 @@ interface ThemeContextValue {
   toggleTheme: () => void;
 }
 
+const STORAGE_KEY = "sda-theme";
+
 const ThemeContext = createContext<ThemeContextValue>({
   theme: "dark",
   toggleTheme: () => {},
 });
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("dark");
+// The <html class="dark"> flag is the source of truth. An inline script in
+// layout.tsx sets it before first paint, so there is no flash of the wrong theme.
+const listeners = new Set<() => void>();
 
-  // Load persisted theme on first mount
-  useEffect(() => {
-    const stored = localStorage.getItem("sda-theme") as Theme | null;
-    const resolved: Theme = stored === "light" || stored === "dark" ? stored : "dark";
-    setTheme(resolved);
-    applyTheme(resolved);
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+const getSnapshot = (): Theme =>
+  document.documentElement.classList.contains("dark") ? "dark" : "light";
+const getServerSnapshot = (): Theme => "dark";
+
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const theme = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+
+  const toggleTheme = useCallback(() => {
+    const next: Theme = getSnapshot() === "dark" ? "light" : "dark";
+    document.documentElement.classList.toggle("dark", next === "dark");
+    try {
+      localStorage.setItem(STORAGE_KEY, next);
+    } catch {
+      /* storage unavailable (private mode) — theme still applies for this session */
+    }
+    listeners.forEach((l) => l());
   }, []);
 
-  const applyTheme = (t: Theme) => {
-    const html = document.documentElement;
-    if (t === "dark") {
-      html.classList.add("dark");
-    } else {
-      html.classList.remove("dark");
-    }
-  };
-
-  const toggleTheme = () => {
-    setTheme((prev) => {
-      const next: Theme = prev === "dark" ? "light" : "dark";
-      localStorage.setItem("sda-theme", next);
-      applyTheme(next);
-      return next;
-    });
-  };
-
-  return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
-      {children}
-    </ThemeContext.Provider>
-  );
+  const value = useMemo(() => ({ theme, toggleTheme }), [theme, toggleTheme]);
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
 export function useTheme() {

@@ -1,1 +1,1 @@
-# Smart Documentation Architect — Backend Application Package.
+# Structify — Backend Application Package.

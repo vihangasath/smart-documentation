@@ -9,25 +9,39 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
-
-# ─── Auth Schemas ────────────────────────────────────────────────────────────────
+# ─── Auth Schemas ────────────────────────────────────────────────────────────
 
 
 class SignupRequest(BaseModel):
     """Request body for user registration."""
 
     name: str = Field(..., min_length=1, max_length=100, description="Display name")
-    email: str = Field(..., description="Email address")
-    password: str = Field(..., min_length=8, description="Plain-text password (min 8 chars)")
+    email: EmailStr = Field(..., description="Email address")
+    password: str = Field(
+        ..., min_length=8, description="Password (8+ chars, max 72 bytes)"
+    )
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Name must not be blank.")
+        return v
 
     @field_validator("email")
     @classmethod
-    def email_must_be_valid(cls, v: str) -> str:
-        if "@" not in v or "." not in v.split("@")[-1]:
-            raise ValueError("Invalid email address.")
+    def normalise_email(cls, v: str) -> str:
         return v.lower().strip()
+
+    @field_validator("password")
+    @classmethod
+    def password_fits_bcrypt(cls, v: str) -> str:
+        if len(v.encode("utf-8")) > 72:
+            raise ValueError("Password must be at most 72 bytes long.")
+        return v
 
 
 class LoginRequest(BaseModel):
@@ -62,24 +76,41 @@ class AuthResponse(BaseModel):
 
 
 class UploadResponse(BaseModel):
-    """Response after a successful SRS file upload."""
+    """Response after a successful SRS upload or text submission."""
 
     document_id: str
     filename: str
     file_type: str
+    char_count: int = 0
     message: str = "File uploaded successfully."
+
+
+class TextDocumentRequest(BaseModel):
+    """Create a document from typed requirements instead of a file."""
+
+    content: str = Field(..., min_length=1, max_length=500_000)
+    filename: str = Field(default="requirements.txt", max_length=200)
 
 
 # ─── Analysis Schemas ────────────────────────────────────────────────────────
 
 
 class AnalyzeRequest(BaseModel):
-    """Request to analyze an already-uploaded document."""
+    """Request to analyze an existing document."""
 
     document_id: str
+    instructions: str = Field(
+        default="",
+        max_length=5000,
+        description="Optional extra guidance for the analysis.",
+    )
 
 
-class AttributeSchema(BaseModel):
+class _FromEntity(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AttributeSchema(_FromEntity):
     """API representation of an entity attribute."""
 
     name: str
@@ -88,7 +119,7 @@ class AttributeSchema(BaseModel):
     description: str = ""
 
 
-class EntitySchema(BaseModel):
+class EntitySchema(_FromEntity):
     """API representation of an extracted entity."""
 
     name: str
@@ -96,7 +127,7 @@ class EntitySchema(BaseModel):
     attributes: list[AttributeSchema] = Field(default_factory=list)
 
 
-class RelationshipSchema(BaseModel):
+class RelationshipSchema(_FromEntity):
     """API representation of a relationship between entities."""
 
     source: str
@@ -105,7 +136,7 @@ class RelationshipSchema(BaseModel):
     label: str = ""
 
 
-class ActionSchema(BaseModel):
+class ActionSchema(_FromEntity):
     """API representation of an extracted action/endpoint."""
 
     name: str
@@ -150,12 +181,13 @@ class DiagramSetResponse(BaseModel):
     document_id: str
     diagrams: list[DiagramSchema] = Field(default_factory=list)
     all_valid: bool = False
+    errors: list[str] = Field(default_factory=list)
 
 
 # ─── Scaffold Schemas ───────────────────────────────────────────────────────
 
 
-class GeneratedFileSchema(BaseModel):
+class GeneratedFileSchema(_FromEntity):
     """API representation of a generated file."""
 
     path: str
@@ -174,18 +206,20 @@ class ScaffoldResponse(BaseModel):
     download_url: str = ""
 
 
-# ─── Pipeline Schemas ───────────────────────────────────────────────────────
+# ─── Job / Pipeline Schemas ─────────────────────────────────────────────────
 
 
-class PipelineResponse(BaseModel):
-    """Response from the full orchestration pipeline."""
+class JobResponse(BaseModel):
+    """State (and, once finished, results) of a background pipeline run."""
 
+    job_id: str
     document_id: str
-    success: bool
+    status: str
+    success: bool = False
+    errors: list[str] = Field(default_factory=list)
     analysis: AnalysisResponse | None = None
     diagrams: DiagramSetResponse | None = None
     scaffold: ScaffoldResponse | None = None
-    errors: list[str] = Field(default_factory=list)
 
 
 # ─── Health/Error Schemas ───────────────────────────────────────────────────
@@ -204,3 +238,4 @@ class ErrorResponse(BaseModel):
 
     detail: str
     error_code: str = "INTERNAL_ERROR"
+    request_id: str = ""

@@ -7,7 +7,6 @@ All LLM-specific details (API keys, model names, retry logic) live in the adapte
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import AsyncIterator
 
 
 class LLMPort(ABC):
@@ -25,6 +24,7 @@ class LLMPort(ABC):
         system_instruction: str = "",
         temperature: float = 0.7,
         max_tokens: int = 4096,
+        json_mode: bool = False,
     ) -> str:
         """
         Generate a complete text response from the LLM.
@@ -34,30 +34,12 @@ class LLMPort(ABC):
             system_instruction: System-level instruction for the model.
             temperature: Sampling temperature.
             max_tokens: Maximum tokens in the response.
+            json_mode: Ask the model for a syntactically valid JSON document.
 
         Returns:
-            Generated text response.
-        """
-        ...
+            Generated text response (never empty).
 
-    @abstractmethod
-    async def generate_stream(
-        self,
-        prompt: str,
-        system_instruction: str = "",
-        temperature: float = 0.7,
-        max_tokens: int = 4096,
-    ) -> AsyncIterator[str]:
-        """
-        Stream text response chunks from the LLM.
-
-        Args:
-            prompt: The user/task prompt.
-            system_instruction: System-level instruction for the model.
-            temperature: Sampling temperature.
-            max_tokens: Maximum tokens in the response.
-
-        Yields:
-            Text chunks as they are generated.
+        Raises:
+            LLMError: If the call fails or the model returns nothing usable.
         """
         ...

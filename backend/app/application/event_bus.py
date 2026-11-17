@@ -1,92 +1,81 @@
 """
-Event Bus — lightweight in-memory event system for SSE agent log streaming.
+Event Bus — lightweight in-memory pub/sub for SSE agent log streaming.
 
-Agents publish events (status updates, progress, errors) and the SSE endpoint
-subscribes to stream them to the frontend in real-time.
+Events are scoped per document: a subscriber only receives events for the
+document it asks for, and late subscribers are first sent a bounded replay of
+what they missed. Subscriber queues are bounded; when a slow client falls
+behind, its oldest events are dropped instead of growing memory without limit.
+
+This is process-local. Move it to Redis pub/sub before running several workers.
 """
 
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
-from enum import StrEnum
-from typing import AsyncIterator
+from collections import OrderedDict, deque
+from collections.abc import AsyncIterator
 
-from pydantic import BaseModel, Field
+from app.domain.entities.events import AgentEvent, EventType
+from app.domain.ports.event_publisher_port import EventPublisherPort
 
-
-class EventType(StrEnum):
-    """Types of events emitted by agents."""
-
-    AGENT_START = "agent_start"
-    AGENT_PROGRESS = "agent_progress"
-    AGENT_COMPLETE = "agent_complete"
-    AGENT_ERROR = "agent_error"
-    PIPELINE_START = "pipeline_start"
-    PIPELINE_COMPLETE = "pipeline_complete"
-    PIPELINE_ERROR = "pipeline_error"
+TERMINAL_EVENTS = frozenset({EventType.PIPELINE_COMPLETE, EventType.PIPELINE_ERROR})
 
 
-class AgentEvent(BaseModel):
-    """A single event emitted during agent processing."""
+class EventBus(EventPublisherPort):
+    """Per-document fan-out event bus with a replay buffer."""
 
-    event_type: EventType
-    agent_name: str = ""
-    document_id: str = ""
-    message: str = ""
-    data: dict = Field(default_factory=dict)
-    timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    def __init__(
+        self,
+        replay_size: int = 200,
+        queue_size: int = 500,
+        max_documents: int = 500,
+    ) -> None:
+        self._replay_size = replay_size
+        self._queue_size = max(queue_size, replay_size + 1)
+        self._max_documents = max_documents
+        self._history: OrderedDict[str, deque[AgentEvent]] = OrderedDict()
+        self._subscribers: dict[str, set[asyncio.Queue[AgentEvent]]] = {}
 
-
-class EventBus:
-    """
-    Simple async event bus for broadcasting agent events.
-
-    Uses asyncio.Queue for each subscriber to implement a
-    fan-out pub/sub pattern.
-    """
-
-    def __init__(self) -> None:
-        self._subscribers: list[asyncio.Queue[AgentEvent]] = []
-
-    def subscribe(self) -> asyncio.Queue[AgentEvent]:
-        """
-        Create a new subscription queue.
-
-        Returns:
-            An asyncio.Queue that will receive all future events.
-        """
-        queue: asyncio.Queue[AgentEvent] = asyncio.Queue()
-        self._subscribers.append(queue)
+    def subscribe(self, document_id: str) -> asyncio.Queue[AgentEvent]:
+        """Create a queue pre-filled with the replay buffer for ``document_id``."""
+        queue: asyncio.Queue[AgentEvent] = asyncio.Queue(maxsize=self._queue_size)
+        for event in self._history.get(document_id, ()):
+            queue.put_nowait(event)
+        self._subscribers.setdefault(document_id, set()).add(queue)
         return queue
 
-    def unsubscribe(self, queue: asyncio.Queue[AgentEvent]) -> None:
+    def unsubscribe(self, document_id: str, queue: asyncio.Queue[AgentEvent]) -> None:
         """Remove a subscription queue."""
-        if queue in self._subscribers:
-            self._subscribers.remove(queue)
+        queues = self._subscribers.get(document_id)
+        if queues:
+            queues.discard(queue)
+            if not queues:
+                del self._subscribers[document_id]
 
     async def publish(self, event: AgentEvent) -> None:
-        """Broadcast an event to all subscribers."""
-        for queue in self._subscribers:
-            await queue.put(event)
+        """Record the event and deliver it to the document's subscribers."""
+        doc_id = event.document_id
+        if event.event_type == EventType.PIPELINE_START:
+            # A new run starts with a clean slate so replays never mix runs.
+            self._history.pop(doc_id, None)
+
+        history = self._history.get(doc_id)
+        if history is None:
+            history = self._history[doc_id] = deque(maxlen=self._replay_size)
+        else:
+            self._history.move_to_end(doc_id)
+        history.append(event)
+        while len(self._history) > self._max_documents:
+            self._history.popitem(last=False)
+
+        for queue in list(self._subscribers.get(doc_id, ())):
+            if queue.full():
+                queue.get_nowait()  # drop the oldest event
+            queue.put_nowait(event)
 
     async def stream(
         self, queue: asyncio.Queue[AgentEvent]
     ) -> AsyncIterator[AgentEvent]:
-        """
-        Async generator that yields events from a subscription queue.
-
-        This is designed to be consumed by SSE endpoints.
-        """
-        try:
-            while True:
-                event = await queue.get()
-                yield event
-        except asyncio.CancelledError:
-            return
-
-
-# Global singleton event bus
-event_bus = EventBus()
+        """Yield events from a subscription queue until cancelled."""
+        while True:
+            yield await queue.get()

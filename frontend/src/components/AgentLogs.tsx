@@ -1,12 +1,21 @@
-import { Terminal } from "lucide-react";
-import { useEffect, useState, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+"use client";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { Terminal } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { streamEvents } from "@/lib/api";
+import type { AgentEvent } from "@/types/api";
 
 interface AgentLogsProps {
   isProcessing: boolean;
+  /** Document whose agent events are streamed. Remount (key) to start a new run. */
   documentId?: string | null;
+}
+
+interface LogLine {
+  agent: string;
+  msg: string;
+  time: string;
 }
 
 const AGENT_COLORS: Record<string, string> = {
@@ -17,49 +26,56 @@ const AGENT_COLORS: Record<string, string> = {
   System: "#64748b",
 };
 
-export default function AgentLogs({ isProcessing }: AgentLogsProps) {
-  const [logs, setLogs] = useState<{ agent: string; msg: string }[]>([]);
+const RECONNECT_DELAY_MS = 1500;
+const MAX_RECONNECTS = 5;
+
+function formatTime(iso: string): string {
+  const d = iso ? new Date(iso) : new Date();
+  return Number.isNaN(d.getTime())
+    ? ""
+    : d.toLocaleTimeString([], { hour12: false });
+}
+
+export default function AgentLogs({ isProcessing, documentId }: AgentLogsProps) {
+  const [logs, setLogs] = useState<LogLine[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!isProcessing) return;
+    if (!documentId) return;
 
-    const timer = setTimeout(() => {
-      setLogs([{ agent: "System", msg: "Connecting to SSE stream…" }]);
-    }, 0);
+    const controller = new AbortController();
+    // The server replays history on every (re)connect, so de-duplicate.
+    const seen = new Set<string>();
+    const add = (agent: string, msg: string, iso = "") =>
+      setLogs((prev) => [...prev, { agent: agent || "System", msg, time: formatTime(iso) }]);
 
-    const eventSource = new EventSource(`${API_URL}/api/events`);
+    const onEvent = (e: AgentEvent) => {
+      const key = `${e.timestamp}|${e.type}|${e.message}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      add(e.agent_name, e.message, e.timestamp);
+    };
 
-    const handleMessage = (event: MessageEvent) => {
-      try {
-        const data = JSON.parse(event.data);
-        setLogs((prev) => [...prev, { agent: data.agent_name, msg: data.message }]);
-      } catch (err) {
-        console.error("Failed to parse SSE message", err);
+    async function run() {
+      for (let attempt = 0; attempt <= MAX_RECONNECTS; attempt++) {
+        try {
+          if (await streamEvents(documentId as string, onEvent, controller.signal)) return;
+        } catch (err) {
+          if (controller.signal.aborted) return;
+          if (attempt === MAX_RECONNECTS) {
+            add("System", `Log stream unavailable: ${err instanceof Error ? err.message : err}`);
+            return;
+          }
+        }
+        if (controller.signal.aborted) return;
+        await new Promise((r) => setTimeout(r, RECONNECT_DELAY_MS));
       }
-    };
+      add("System", "Log stream disconnected.");
+    }
 
-    const eventTypes = [
-      "agent_start", "agent_progress", "agent_complete", "agent_error",
-      "pipeline_start", "pipeline_complete", "pipeline_error",
-    ];
-
-    eventTypes.forEach((type) => eventSource.addEventListener(type, handleMessage));
-
-    eventSource.onopen = () => {
-      setLogs((prev) => [...prev, { agent: "System", msg: "Stream connected. Awaiting events…" }]);
-    };
-    eventSource.onmessage = handleMessage;
-    eventSource.onerror = () => {
-      setLogs((prev) => [...prev, { agent: "System", msg: "Stream disconnected." }]);
-      eventSource.close();
-    };
-
-    return () => {
-      clearTimeout(timer);
-      eventSource.close();
-    };
-  }, [isProcessing]);
+    void run();
+    return () => controller.abort();
+  }, [documentId]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -98,7 +114,7 @@ export default function AgentLogs({ isProcessing }: AgentLogsProps) {
         className="flex-1 p-3 font-mono text-xs overflow-auto space-y-1.5"
         style={{ background: "var(--terminal-bg)" }}
       >
-        <AnimatePresence>
+        <AnimatePresence initial={false}>
           {logs.map((log, idx) => (
             <motion.div
               key={idx}
@@ -106,16 +122,18 @@ export default function AgentLogs({ isProcessing }: AgentLogsProps) {
               animate={{ opacity: 1, x: 0 }}
               className="flex gap-2"
             >
-              <span style={{ color: "var(--text-muted)" }} className="shrink-0">
-                [{new Date().toLocaleTimeString([], { hour12: false })}]
-              </span>
+              {log.time && (
+                <span style={{ color: "var(--text-muted)" }} className="shrink-0">
+                  [{log.time}]
+                </span>
+              )}
               <span
                 className="shrink-0"
-                style={{ color: AGENT_COLORS[log?.agent] || AGENT_COLORS.System }}
+                style={{ color: AGENT_COLORS[log.agent] || AGENT_COLORS.System }}
               >
-                &lt;{log?.agent || "System"}&gt;
+                &lt;{log.agent}&gt;
               </span>
-              <span style={{ color: "var(--terminal-text)" }}>{log?.msg || ""}</span>
+              <span style={{ color: "var(--terminal-text)" }}>{log.msg}</span>
             </motion.div>
           ))}
         </AnimatePresence>

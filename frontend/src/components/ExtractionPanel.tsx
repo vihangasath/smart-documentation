@@ -96,8 +96,8 @@ function EntityCard({ entity }: { entity: Entity }) {
               </p>
             )}
             <div className="px-3 py-2 space-y-1">
-              {entity.attributes.map((attr) => (
-                <div key={attr.name} className="flex items-center gap-2 text-xs">
+              {entity.attributes.map((attr, i) => (
+                <div key={`${attr.name}-${i}`} className="flex items-center gap-2 text-xs">
                   <span className="font-mono" style={{ color: "var(--text-primary)" }}>{attr.name}</span>
                   <span className="font-mono" style={{ color: "#a855f7" }}>:{attr.data_type}</span>
                   {attr.is_required && (
@@ -190,7 +190,7 @@ export default function ExtractionPanel({ isProcessing, data }: ExtractionPanelP
             >
               {activeTab === "entities" && (
                 entities.length > 0
-                  ? entities.map((e) => <EntityCard key={e.name} entity={e} />)
+                  ? entities.map((e, i) => <EntityCard key={`${e.name}-${i}`} entity={e} />)
                   : <p className="text-xs" style={{ color: "var(--text-muted)" }}>No entities extracted.</p>
               )}
 
